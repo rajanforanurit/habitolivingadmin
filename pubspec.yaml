@@ -14,10 +14,7 @@ dependencies:
   # Lives in the habitoliving repo at packages/shared so the resident, admin
   # and guard apps all use one copy.
   habitoliving_shared:
-    git:
-      url: https://github.com/rajanforanurit/habitoliving.git
-      path: packages/shared
-      ref: main
+    path: packages/shared
 
   # --- App-level only -------------------------------------------------------
   firebase_core: ^3.6.0

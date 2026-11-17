@@ -1,0 +1,455 @@
+import 'dart:async';
+
+import '../../models/admin.dart';
+import '../../models/json.dart';
+import '../api_client.dart';
+
+/// Platform-operator (super admin) API client: the 6 `Super Admin - *`
+/// sections (~59 routes).
+///
+/// The platform operator sees across societies, so almost every call is
+/// society-scoped by id rather than implicit.
+class SuperAdminApi {
+  SuperAdminApi(this._api);
+  final ApiClient _api;
+
+  // ------------------------------------------------------------- dashboard
+
+  Future<Map<String, dynamic>> dashboard() async {
+    final data = await _api.get('/super-admin/dashboard');
+    return reqMap(data, field: 'dashboard');
+  }
+
+  Future<PlatformHealth> health() async {
+    final data = await _api.get('/super-admin/monitoring/health');
+    return PlatformHealth.fromJson(reqMap(data, field: 'health'));
+  }
+
+  Future<List<Map<String, dynamic>>> errors({String? from, String? to}) async {
+    final data = await _api.get(
+      '/super-admin/monitoring/errors',
+      query: {
+        if (from != null && from.isNotEmpty) 'from': from,
+        if (to != null && to.isNotEmpty) 'to': to,
+      },
+    );
+    return asMapList(data);
+  }
+
+  Future<List<Map<String, dynamic>>> featureUsage({int days = 30}) async {
+    final data = await _api.get(
+      '/super-admin/monitoring/feature-usage',
+      query: {'days': '$days'},
+    );
+    return asMapList(data);
+  }
+
+  Future<List<Map<String, dynamic>>> impersonations({
+    int page = 1,
+    int limit = 20,
+  }) async {
+    final data = await _api.get(
+      '/super-admin/monitoring/impersonations',
+      query: {'page': '$page', 'limit': '$limit'},
+    );
+    return asMapList(data);
+  }
+
+  // ------------------------------------------------------------- societies
+
+  Future<PageResult<PlatformSociety>> societies({
+    int page = 1,
+    int limit = 20,
+    String? status,
+    String? search,
+  }) async {
+    final data = await _api.get(
+      '/super-admin/societies',
+      query: {
+        'page': '$page',
+        'limit': '$limit',
+        if (status != null && status.isNotEmpty) 'status': status,
+        if (search != null && search.trim().isNotEmpty) 'search': search.trim(),
+      },
+    );
+    return PageResult.from(data, _api.lastMeta, PlatformSociety.fromJson);
+  }
+
+  Future<PlatformSociety> society(String id) async {
+    final data = await _api.get('/super-admin/societies/$id');
+    return PlatformSociety.fromJson(reqMap(data, field: 'society'));
+  }
+
+  /// Create a society together with its primary administrator.
+  Future<PlatformSociety> createSociety({
+    required String name,
+    required String type,
+    required String city,
+    required String state,
+    required String code,
+    String? address,
+    required String adminName,
+    required String adminMobile,
+    String? adminEmail,
+    required String adminPassword,
+  }) async {
+    final data = await _api.post(
+      '/super-admin/societies',
+      body: {
+        'name': name,
+        'type': type,
+        'code': code.toUpperCase(),
+        'address': {
+          'city': city,
+          'state': state,
+          if (address != null) 'line1': address,
+        },
+        'primaryAdmin': {
+          'name': adminName,
+          'mobile': adminMobile,
+          if (adminEmail != null && adminEmail.isNotEmpty) 'email': adminEmail,
+          'password': adminPassword,
+        },
+      },
+    );
+    return PlatformSociety.fromJson(reqMap(data, field: 'society'));
+  }
+
+  Future<void> updateSociety(String id, Map<String, dynamic> body) async {
+    await _api.patch('/super-admin/societies/$id', body: body);
+  }
+
+  /// Soft-delete a society.
+  Future<void> deleteSociety(String id) async {
+    await _api.delete('/super-admin/societies/$id');
+  }
+
+  Future<void> activateSociety(String id) async {
+    await _api.post('/super-admin/societies/$id/activate');
+  }
+
+  Future<void> deactivateSociety(String id, {String? reason}) async {
+    await _api.post(
+      '/super-admin/societies/$id/deactivate',
+      body: {if (reason != null && reason.isNotEmpty) 'reason': reason},
+    );
+  }
+
+  /// Replace the society's module entitlements.
+  Future<void> setFeatures(String id, Map<String, bool> features) async {
+    await _api.put(
+      '/super-admin/societies/$id/features',
+      body: {'features': features},
+    );
+  }
+
+  Future<void> assignPlan(String id, {required String planId}) async {
+    await _api.put('/super-admin/societies/$id/plan', body: {'planId': planId});
+  }
+
+  /// Start an audited impersonation of a society admin. The reason is required
+  /// by the backend and is written to the immutable audit log. The returned
+  /// token is short-lived (minutes, capped server-side).
+  Future<Map<String, dynamic>> impersonate(
+    String societyId, {
+    required String reason,
+    int durationMinutes = 30,
+  }) async {
+    final data = await _api.post(
+      '/super-admin/societies/$societyId/impersonate',
+      body: {'reason': reason, 'durationMinutes': durationMinutes},
+    );
+    return reqMap(data, field: 'session');
+  }
+
+  Future<void> endImpersonation(String sessionId) async {
+    await _api.post('/super-admin/impersonations/$sessionId/end');
+  }
+
+  // ------------------------------------------------------------- admins
+
+  Future<List<AdminUser>> admins({int page = 1, int limit = 20}) async {
+    final data = await _api.get(
+      '/super-admin/admins',
+      query: {'page': '$page', 'limit': '$limit'},
+    );
+    return asMapList(data).map(AdminUser.fromJson).toList(growable: false);
+  }
+
+  Future<Map<String, dynamic>> createAdmin(Map<String, dynamic> body) async {
+    final data = await _api.post('/super-admin/admins', body: body);
+    return reqMap(data, field: 'admin');
+  }
+
+  Future<void> updateAdmin(String id, Map<String, dynamic> body) async {
+    await _api.patch('/super-admin/admins/$id', body: body);
+  }
+
+  Future<void> deactivateAdmin(String id) async {
+    await _api.patch('/super-admin/admins/$id', body: {'status': 'INACTIVE'});
+  }
+
+  /// Returns `{ temporaryPassword }` — shown once, then discarded.
+  Future<Map<String, dynamic>> resetAdminAccess(String id) async {
+    final data = await _api.post('/super-admin/admins/$id/reset-access');
+    return reqMap(data, field: 'result');
+  }
+
+  Future<List<Map<String, dynamic>>> adminActivity(String id) async {
+    final data = await _api.get('/super-admin/admins/$id/activity');
+    return asMapList(data);
+  }
+
+  // ------------------------------------------------------------- security
+
+  /// `{type, key, count, lastSeenAt}` rows — not paged server-side.
+  Future<List<Map<String, dynamic>>> suspiciousActivity() async {
+    final data = await _api.get('/super-admin/security/suspicious-activity');
+    return asMapList(data);
+  }
+
+  Future<PageResult<LoginRecord>> loginHistory({
+    int page = 1,
+    int limit = 20,
+    String? userId,
+  }) async {
+    final data = await _api.get(
+      '/super-admin/security/login-history',
+      query: {
+        'page': '$page',
+        'limit': '$limit',
+        if (userId != null && userId.isNotEmpty) 'userId': userId,
+      },
+    );
+    return PageResult.from(data, _api.lastMeta, LoginRecord.fromJson);
+  }
+
+  Future<List<Map<String, dynamic>>> users({
+    String? search,
+    int page = 1,
+    int limit = 20,
+  }) async {
+    final data = await _api.get(
+      '/super-admin/security/users',
+      query: {
+        'page': '$page',
+        'limit': '$limit',
+        if (search != null && search.trim().isNotEmpty) 'search': search.trim(),
+      },
+    );
+    return asMapList(data);
+  }
+
+  Future<void> blockUser(String userId, {required String reason}) async {
+    await _api.post(
+      '/super-admin/security/users/$userId/block',
+      body: {'reason': reason},
+    );
+  }
+
+  Future<void> unblockUser(String userId) async {
+    await _api.post('/super-admin/security/users/$userId/unblock');
+  }
+
+  // ------------------------------------------------------------- support
+
+  Future<PageResult<SupportTicket>> supportTickets({
+    int page = 1,
+    int limit = 20,
+    String? status,
+  }) async {
+    final data = await _api.get(
+      '/super-admin/support-tickets',
+      query: {
+        'page': '$page',
+        'limit': '$limit',
+        if (status != null && status.isNotEmpty) 'status': status,
+      },
+    );
+    return PageResult.from(data, _api.lastMeta, SupportTicket.fromJson);
+  }
+
+  Future<SupportTicket> createTicket({
+    required String subject,
+    required String description,
+    String category = 'OTHER',
+    String priority = 'MEDIUM',
+    String? societyId,
+  }) async {
+    final data = await _api.post(
+      '/super-admin/support-tickets',
+      body: {
+        'subject': subject,
+        'description': description,
+        'category': category,
+        'priority': priority,
+        if (societyId != null && societyId.isNotEmpty) 'societyId': societyId,
+      },
+    );
+    return SupportTicket.fromJson(reqMap(data, field: 'ticket'));
+  }
+
+  Future<void> replyToTicket(String id, {required String message}) async {
+    await _api.post(
+      '/super-admin/support-tickets/$id/comments',
+      body: {'message': message},
+    );
+  }
+
+  Future<void> updateTicketStatus(String id, String status) async {
+    await _api.patch(
+      '/super-admin/support-tickets/$id',
+      body: {'status': status},
+    );
+  }
+
+  // ------------------------------------------------------------- platform config
+
+  Future<List<Plan>> plans() async {
+    final data = await _api.get('/super-admin/plans');
+    return asMapList(data).map(Plan.fromJson).toList(growable: false);
+  }
+
+  Future<Plan> createPlan(Map<String, dynamic> body) async {
+    final data = await _api.post('/super-admin/plans', body: body);
+    return Plan.fromJson(reqMap(data, field: 'plan'));
+  }
+
+  Future<void> updatePlan(String id, Map<String, dynamic> body) async {
+    await _api.patch('/super-admin/plans/$id', body: body);
+  }
+
+  /// All config entries, every key the platform uses.
+  Future<List<Map<String, dynamic>>> configs() async {
+    return asMapList(await _api.get('/super-admin/configs'));
+  }
+
+  /// Create or update one config entry. The value is opaque to the backend —
+  /// a string, a number, a bool — so the caller decides how to edit it.
+  Future<void> putConfig(
+    String key, {
+    required Object? value,
+    String? description,
+  }) async {
+    await _api.put(
+      '/super-admin/configs/$key',
+      body: {
+        'value': value,
+        if (description != null && description.isNotEmpty)
+          'description': description,
+      },
+    );
+  }
+
+  Future<List<Map<String, dynamic>>> organizations() async {
+    return asMapList(await _api.get('/super-admin/organizations'));
+  }
+
+  Future<Map<String, dynamic>> createOrganization({
+    required String name,
+    String? contactEmail,
+    String? contactPhone,
+    String? address,
+    String status = 'ACTIVE',
+  }) async {
+    final data = await _api.post(
+      '/super-admin/organizations',
+      body: {
+        'name': name,
+        if (contactEmail != null && contactEmail.isNotEmpty)
+          'contactEmail': contactEmail,
+        if (contactPhone != null && contactPhone.isNotEmpty)
+          'contactPhone': contactPhone,
+        if (address != null && address.isNotEmpty) 'address': address,
+        'status': status,
+      },
+    );
+    return reqMap(data, field: 'organization');
+  }
+
+  Future<void> deleteOrganization(String id) async {
+    await _api.delete('/super-admin/organizations/$id');
+  }
+
+  Future<List<Map<String, dynamic>>> roleTemplates() async {
+    return asMapList(await _api.get('/super-admin/role-templates'));
+  }
+
+  Future<List<NotificationTemplate>> notificationTemplates() async {
+    final data = await _api.get('/super-admin/notification-templates');
+    return asMapList(
+      data,
+    ).map(NotificationTemplate.fromJson).toList(growable: false);
+  }
+
+  Future<NotificationTemplate> createNotificationTemplate(
+    Map<String, dynamic> body,
+  ) async {
+    final data = await _api.post(
+      '/super-admin/notification-templates',
+      body: body,
+    );
+    return NotificationTemplate.fromJson(reqMap(data, field: 'template'));
+  }
+
+  Future<void> updateNotificationTemplate(
+    String id,
+    Map<String, dynamic> body,
+  ) async {
+    await _api.patch('/super-admin/notification-templates/$id', body: body);
+  }
+
+  Future<void> deleteNotificationTemplate(String id) async {
+    await _api.delete('/super-admin/notification-templates/$id');
+  }
+
+  Future<void> deletePlan(String id) async {
+    await _api.delete('/super-admin/plans/$id');
+  }
+
+  Future<List<AuditLog>> auditLogs({int page = 1, int limit = 50}) async {
+    final data = await _api.get(
+      '/super-admin/audit-logs',
+      query: {'page': '$page', 'limit': '$limit'},
+    );
+    return asMapList(data).map(AuditLog.fromJson).toList(growable: false);
+  }
+
+  // ------------------------------------------------------------- announcements
+
+  Future<List<Map<String, dynamic>>> announcements({
+    int page = 1,
+    int limit = 20,
+  }) async {
+    final data = await _api.get(
+      '/super-admin/announcements',
+      query: {'page': '$page', 'limit': '$limit'},
+    );
+    return asMapList(data);
+  }
+
+  Future<Map<String, dynamic>> createAnnouncement({
+    required String title,
+    required String body,
+    String severity = 'INFO',
+    String audience = 'ALL',
+    List<String>? societyIds,
+  }) async {
+    final data = await _api.post(
+      '/super-admin/announcements',
+      body: {
+        'title': title,
+        'body': body,
+        'severity': severity,
+        'audience': audience,
+        if (societyIds != null && societyIds.isNotEmpty)
+          'societyIds': societyIds,
+      },
+    );
+    return reqMap(data, field: 'announcement');
+  }
+
+  Future<void> deleteAnnouncement(String id) async {
+    await _api.delete('/super-admin/announcements/$id');
+  }
+}
