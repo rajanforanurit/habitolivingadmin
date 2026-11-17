@@ -1,0 +1,84 @@
+{
+  "project_info": {
+    "project_number": "354471643881",
+    "project_id": "habitolivingadmin",
+    "storage_bucket": "habitolivingadmin.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:354471643881:android:a2aad7a37938fe8eb67e78",
+        "android_client_info": {
+          "package_name": "com.anuritinnovation.habitolivingadmin"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "354471643881-94oln5qfsmvgs4ubhaecctv97tm7hf28.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.anuritinnovation.habitolivingadmin",
+            "certificate_hash": "9c162aecca136c7a8cf16612ea3e8fc0dcf24075"
+          }
+        },
+        {
+          "client_id": "354471643881-gssm8rn8c7918jt24i0c0m0jig9glci0.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.anuritinnovation.habitolivingadmin",
+            "certificate_hash": "37ab7e8ec48d77608c22d05d19bca6debaf14146"
+          }
+        },
+        {
+          "client_id": "354471643881-dilp5k2r394v036d6j0othtfkihejp40.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDQxdsHYd--Psa5ltL1i3dIFb34Bpr9eZc"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "354471643881-dilp5k2r394v036d6j0othtfkihejp40.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:354471643881:android:1de9d8ed6a2ea842b67e78",
+        "android_client_info": {
+          "package_name": "com.example.habitolivingadmin"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "354471643881-dilp5k2r394v036d6j0othtfkihejp40.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDQxdsHYd--Psa5ltL1i3dIFb34Bpr9eZc"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "354471643881-dilp5k2r394v036d6j0othtfkihejp40.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
