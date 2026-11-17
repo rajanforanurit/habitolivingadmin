@@ -22,6 +22,14 @@
           }
         },
         {
+          "client_id": "354471643881-bbeqj52jbu9a1ijll20jd6h6aj06m4ej.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.anuritinnovation.habitolivingadmin",
+            "certificate_hash": "5a4f46a49cd9863009a33cebdb21ba369def7f41"
+          }
+        },
+        {
           "client_id": "354471643881-gssm8rn8c7918jt24i0c0m0jig9glci0.apps.googleusercontent.com",
           "client_type": 1,
           "android_info": {
@@ -45,6 +53,13 @@
             {
               "client_id": "354471643881-dilp5k2r394v036d6j0othtfkihejp40.apps.googleusercontent.com",
               "client_type": 3
+            },
+            {
+              "client_id": "354471643881-217f7dvmn82rlt82e2va8og0aha347ar.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.example.habitolivingadmin"
+              }
             }
           ]
         }
@@ -74,6 +89,13 @@
             {
               "client_id": "354471643881-dilp5k2r394v036d6j0othtfkihejp40.apps.googleusercontent.com",
               "client_type": 3
+            },
+            {
+              "client_id": "354471643881-217f7dvmn82rlt82e2va8og0aha347ar.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.example.habitolivingadmin"
+              }
             }
           ]
         }
