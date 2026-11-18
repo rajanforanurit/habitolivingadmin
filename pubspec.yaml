@@ -10,18 +10,13 @@ dependencies:
   flutter:
     sdk: flutter
 
-  # --- Shared code (models, services, UI, theme, config) --------------------
-  # Lives in the habitoliving repo at packages/shared so the resident, admin
-  # and guard apps all use one copy.
   habitoliving_shared:
     path: packages/shared
 
-  # --- App-level only -------------------------------------------------------
   firebase_core: ^3.6.0
   url_launcher: ^6.3.0
   http: ^1.2.2
-
-  # --- In-app updater (self-contained in lib/updates/, disabled) -----------
+  flutter_webrtc: ^0.12.12+hotfix.1
   package_info_plus: ^8.0.0
   path_provider: ^2.1.0
 
@@ -37,8 +32,7 @@ flutter:
     - assets/fonts/
 
   fonts:
-    # UI typeface: Instrument Sans. Neutral grotesque with a slight humanist
-    # warmth, used for every screen.
+    
     - family: InstrumentSans
       fonts:
         - asset: assets/fonts/InstrumentSans-Regular.ttf
