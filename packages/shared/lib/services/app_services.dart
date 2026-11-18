@@ -9,7 +9,9 @@ import 'api/files_api.dart';
 import 'media_service.dart';
 import 'api/guard_api.dart';
 import 'api/resident_api.dart';
+import 'api/society_ops_api.dart';
 import 'api/super_admin_api.dart';
+import 'call_service.dart';
 import 'auth_service.dart';
 import 'session.dart';
 import 'socket_service.dart';
@@ -33,6 +35,8 @@ class AppServices {
   late final GuardApi guard = GuardApi(api);
   late final AdminApi admin = AdminApi(api);
   late final SuperAdminApi superAdmin = SuperAdminApi(api);
+  late final SocietyOpsApi ops = SocietyOpsApi(api);
+  late final CallService calls = CallService(ops, socket);
   late final FilesApi files = FilesApi(api);
   late final MediaService media = MediaService(files);
   late final NotificationsApi notifications = NotificationsApi(api);
@@ -61,6 +65,7 @@ class AppServices {
 
   /// Drops the session and closes the socket. Used on logout.
   void detachSession() {
+    calls.reset();
     session.clear();
     socket.disconnect();
   }

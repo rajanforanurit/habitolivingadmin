@@ -6,10 +6,13 @@ import 'package:habitoliving_shared/ui/icons.dart';
 import 'package:habitoliving_shared/ui/tokens.dart';
 import 'auth/login_screen.dart';
 import 'admin/admin_shell.dart';
+import 'super_admin/super_admin_shell.dart';
+import 'change_password_screen.dart';
 
 /// Picks the shell for the signed-in role.
 ///
-/// This is the **society admin** app. Residents and guards have their own APKs
+/// This app hosts two portals: the **Super Admin** portal (platform team) and
+/// the **society admin** portal. Residents and guards have their own APKs
 /// (habitoliving, habitoliving_guard), so any other account gets a "wrong app"
 /// screen instead of an empty dashboard.
 class RootShell extends StatelessWidget {
@@ -27,10 +30,18 @@ class RootShell extends StatelessWidget {
           // elsewhere): fall back to sign-in rather than a blank screen.
           return const LoginScreen();
         }
-        if (session.role != UserRole.societyAdmin) {
-          return const _WrongAppScreen();
+        // An admin with a temporary or reset password must replace it before
+        // anything else (the backend refuses other calls until they do).
+        if (identity.user.mustChangePassword && session.role.isAdmin) {
+          return const ChangePasswordScreen(forced: true);
         }
-        return const AdminShell();
+        // Two portals in one app: the platform team and a society's admins.
+        // The role comes from the verified session, never from the UI.
+        return switch (session.role) {
+          UserRole.superAdmin => const SuperAdminShell(),
+          UserRole.societyAdmin => const AdminShell(),
+          _ => const _WrongAppScreen(),
+        };
       },
     );
   }
@@ -64,7 +75,7 @@ class _WrongAppScreen extends StatelessWidget {
               ),
               const SizedBox(height: Tokens.space2),
               Text(
-                'This is the society admin app. Residents and guards have '
+                'This is the admin app. Residents and guards have '
                 'their own apps — ask your administrator for the right one.',
                 style: TextStyle(
                   fontFamily: Tokens.fontFamily,

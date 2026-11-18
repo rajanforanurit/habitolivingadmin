@@ -16,6 +16,7 @@ class ApprovalRequest {
   const ApprovalRequest({
     required this.id,
     required this.status,
+    required this.rawStatus,
     required this.entityType,
     required this.entityId,
     this.title,
@@ -34,6 +35,7 @@ class ApprovalRequest {
     return ApprovalRequest(
       id: asString(json['id']),
       status: humanize(asString(json['status'], fallback: 'SUBMITTED')),
+      rawStatus: asString(json['status'], fallback: 'SUBMITTED').toUpperCase(),
       entityType: humanize(
         asString(json['entityType'], fallback: 'COMMUNITY_POST'),
       ),
@@ -55,6 +57,10 @@ class ApprovalRequest {
 
   final String id;
   final String status;
+
+  /// The backend status exactly as sent (`UNDER_REVIEW`). [status] is the
+  /// display label; compare against this one in code.
+  final String rawStatus;
   final String entityType;
   final String entityId;
   final String? title;
@@ -67,10 +73,9 @@ class ApprovalRequest {
   final bool autoPublish;
 
   bool get isPending =>
-      status.toUpperCase() == 'SUBMITTED' ||
-      status.toUpperCase() == 'UNDER_REVIEW';
+      rawStatus == 'SUBMITTED' || rawStatus == 'UNDER_REVIEW';
 
-  String get entityLabel => switch (entityType.toUpperCase()) {
+  String get entityLabel => switch (entityType.toUpperCase().replaceAll(' ', '_')) {
     'MARKETPLACE_LISTING' => 'Marketplace listing',
     'PROPERTY_LISTING' => 'Property listing',
     'COMMUNITY_POST' => 'Community post',
@@ -283,18 +288,22 @@ class Guard {
     this.onDuty = false,
   });
 
-  factory Guard.fromJson(Map<String, dynamic> json) => Guard(
-    id: asString(json['id'] ?? json['userId']),
-    name: asString(json['name'], fallback: 'Guard'),
-    status: humanize(asString(json['status'], fallback: 'ACTIVE')),
-    phone: asStringOrNull(json['phone'] ?? json['mobile']),
-    gate: asStringOrNull(json['gateName'] ?? json['assignedGate']),
-    shift: asStringOrNull(json['shift']) == null
-        ? null
-        : humanize(asString(json['shift'])),
-    shiftEndsAt: asDateOrNull(json['shiftEndsAt']),
-    onDuty: asBool(json['onDuty']),
-  );
+  factory Guard.fromJson(Map<String, dynamic> json) {
+    // The backend nests the person under `user` and sends the gate as an id.
+    final user = asMapOrNull(json['user']);
+    return Guard(
+      id: asString(json['id'] ?? json['userId']),
+      name: asString(user?['name'] ?? json['name'], fallback: 'Guard'),
+      status: humanize(asString(json['status'], fallback: 'ACTIVE')),
+      phone: asStringOrNull(user?['mobile'] ?? json['phone'] ?? json['mobile']),
+      gate: asStringOrNull(json['gateName'] ?? json['assignedGate']),
+      shift: asStringOrNull(json['shift']) == null
+          ? null
+          : humanize(asString(json['shift'])),
+      shiftEndsAt: asDateOrNull(json['shiftEndsAt']),
+      onDuty: asBool(json['onDuty']),
+    );
+  }
 
   final String id;
   final String name;
@@ -518,21 +527,34 @@ class AdminUser {
     this.email,
     this.roleName,
     this.lastLoginAt,
+    this.societyId,
+    this.societyName,
+    this.societyCode,
+    this.designation,
   });
 
   factory AdminUser.fromJson(Map<String, dynamic> json) {
     final user = asMapOrNull(json['user']);
+    final society = asMapOrNull(json['society']);
     return AdminUser(
+      societyId: asStringOrNull(society?['id'] ?? json['societyId']),
+      societyName: asStringOrNull(society?['name']),
+      societyCode: asStringOrNull(society?['code']),
+      designation: asStringOrNull(json['designation']),
       id: asString(json['id'] ?? json['userId']),
       name: asString(at(user, 'name') ?? json['name'], fallback: 'Admin'),
       mobile: asString(at(user, 'mobile') ?? json['mobile']),
       email: asStringOrNull(at(user, 'email') ?? json['email']),
       status: humanize(asString(json['status'], fallback: 'ACTIVE')),
       roleName: _roleName(json),
-      lastLoginAt: asDateOrNull(json['lastLoginAt']),
+      lastLoginAt: asDateOrNull(at(user, 'lastLoginAt') ?? json['lastLoginAt']),
     );
   }
 
+  final String? societyId;
+  final String? societyName;
+  final String? societyCode;
+  final String? designation;
   final String id;
   final String name;
   final String mobile;
@@ -815,6 +837,7 @@ class PlatformSociety {
     required this.id,
     required this.name,
     required this.status,
+    this.rawStatus = 'PENDING',
     this.code,
     this.city,
     this.state,
@@ -824,15 +847,21 @@ class PlatformSociety {
     this.adminMobile,
     this.createdAt,
     this.features = const {},
+    this.propertyType,
+    this.totalUnits,
   });
 
   factory PlatformSociety.fromJson(Map<String, dynamic> json) {
-    final primaryAdmin = asMapOrNull(json['primaryAdmin']);
+    // The list/detail record carries no admin; a pending registration has its
+    // applicant. The real administrators come from the administration endpoint.
+    final primaryAdmin =
+        asMapOrNull(json['primaryAdmin']) ?? asMapOrNull(json['applicant']);
     final plan = asMapOrNull(json['plan']);
     return PlatformSociety(
       id: asString(json['id']),
       name: asString(json['name'], fallback: 'Society'),
       status: humanize(asString(json['status'], fallback: 'PENDING')),
+      rawStatus: asString(json['status'], fallback: 'PENDING').toUpperCase(),
       code: asStringOrNull(json['code']),
       city: asStringOrNull(_addr(json)['city'] ?? json['city']),
       state: asStringOrNull(_addr(json)['state'] ?? json['state']),
@@ -844,12 +873,20 @@ class PlatformSociety {
       ),
       createdAt: asDateOrNull(json['createdAt']),
       features: asMap(json['features']).map((k, v) => MapEntry(k, v == true)),
+      propertyType: asStringOrNull(json['propertyType']),
+      totalUnits: asIntOrNull(json['totalUnits']),
     );
   }
 
   final String id;
   final String name;
   final String status;
+  final String? propertyType;
+  final int? totalUnits;
+
+  /// Backend status (`PENDING`, `ACTIVE`, `INACTIVE`, `REJECTED`, ...). Use
+  /// this for logic; [status] is the display label.
+  final String rawStatus;
   final String? code;
   final String? city;
   final String? state;

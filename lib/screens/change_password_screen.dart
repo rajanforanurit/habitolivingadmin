@@ -13,7 +13,12 @@ import '../app.dart';
 /// The backend verifies the current password before setting a new one, so the
 /// app asks for it too — an unlocked phone is not proof of identity.
 class ChangePasswordScreen extends StatefulWidget {
-  const ChangePasswordScreen({super.key});
+  const ChangePasswordScreen({super.key, this.forced = false});
+
+  /// True when the backend requires a new password before anything else (a
+  /// temporary or admin-issued password). The screen cannot be dismissed, and
+  /// the user signs in again with the new password afterwards.
+  final bool forced;
 
   @override
   State<ChangePasswordScreen> createState() => _ChangePasswordScreenState();
@@ -50,6 +55,13 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
         newPassword: _next.text,
       );
       if (!mounted) return;
+      if (widget.forced) {
+        // The backend revokes every session on a password change, so the
+        // sign-in screen is the honest next step.
+        showMessage(context, 'Password changed. Sign in with your new password.');
+        await AppServices.instance.auth.logout();
+        return;
+      }
       showMessage(context, 'Password changed');
       Navigator.of(context).pop();
     } catch (e) {
@@ -63,9 +75,14 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return AppScaffold(
-      title: 'Change password',
-      showBack: true,
+    return PopScope(
+      canPop: !widget.forced,
+      child: AppScaffold(
+      title: widget.forced ? 'Set a new password' : 'Change password',
+      subtitle: widget.forced
+          ? 'You must replace your temporary password to continue'
+          : null,
+      showBack: !widget.forced,
       body: ListView(
         padding: const EdgeInsets.only(
           left: Tokens.gutter,
@@ -106,7 +123,7 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
                   autofillHints: const [AutofillHints.newPassword],
                   decoration: InputDecoration(
                     labelText: 'New password',
-                    helperText: 'At least 8 characters',
+                    helperText: '8+ characters with upper and lower case letters and a digit',
                     suffixIcon: IconButton(
                       icon: AppIcon(
                         _showNext ? Icons2.visibilityOff : Icons2.visibility,
@@ -117,6 +134,11 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
                   validator: (v) {
                     if (v == null || v.length < 8) {
                       return 'Use at least 8 characters';
+                    }
+                    if (!RegExp(r'[a-z]').hasMatch(v) ||
+                        !RegExp(r'[A-Z]').hasMatch(v) ||
+                        !RegExp(r'\d').hasMatch(v)) {
+                      return 'Add upper and lower case letters and a digit';
                     }
                     if (v == _current.text) {
                       return 'Choose a different password';
@@ -150,6 +172,7 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
             ),
           ),
         ],
+      ),
       ),
     );
   }

@@ -41,6 +41,28 @@ class _ApprovalsTabState extends State<ApprovalsTab> {
   ];
 
   int _tick = 0;
+  final List<void Function()> _subs = [];
+
+  @override
+  void initState() {
+    super.initState();
+    // A resident submitting something must show up without a manual refresh.
+    for (final event in const ['approval:new', 'approval:updated']) {
+      _subs.add(
+        AppServices.instance.socket.on(event, (_) {
+          if (mounted) setState(() => _tick++);
+        }),
+      );
+    }
+  }
+
+  @override
+  void dispose() {
+    for (final cancel in _subs) {
+      cancel();
+    }
+    super.dispose();
+  }
 
   void _set(String value) {
     if (value == _status) return;
@@ -365,7 +387,7 @@ class _ApprovalCardState extends State<_ApprovalCard> {
               spacing: Tokens.space2,
               runSpacing: Tokens.space2,
               children: [
-                if (r.status == 'SUBMITTED')
+                if (r.rawStatus == 'SUBMITTED')
                   _Action(
                     label: 'Start review',
                     icon: Icons2.search,
@@ -415,7 +437,7 @@ class _ApprovalCardState extends State<_ApprovalCard> {
                       action: (reason) => admin.reject(r.id, reason: reason),
                     ),
                   ),
-                if (r.status == 'APPROVED')
+                if (r.rawStatus == 'APPROVED' || r.rawStatus == 'PUBLISHED')
                   _Action(
                     label: 'Suspend',
                     icon: Icons2.cancel,
@@ -428,13 +450,13 @@ class _ApprovalCardState extends State<_ApprovalCard> {
                       action: (reason) => admin.suspend(r.id, reason: reason),
                     ),
                   ),
-                if (r.status == 'SUSPENDED' || r.status == 'REJECTED')
+                if (r.rawStatus == 'SUSPENDED')
                   _Action(
                     label: 'Restore',
                     icon: Icons2.refresh,
                     onTap: () => _run(() => admin.restore(r.id), 'Restored.'),
                   ),
-                if (r.status == 'APPROVED')
+                if (r.rawStatus == 'APPROVED' || r.rawStatus == 'PUBLISHED')
                   _Action(
                     label: 'Remove',
                     icon: Icons2.delete,

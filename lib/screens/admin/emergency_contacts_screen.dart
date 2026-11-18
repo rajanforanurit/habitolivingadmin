@@ -1,318 +1,287 @@
 import 'package:flutter/material.dart';
 
 import '../../app.dart';
-import 'package:habitoliving_shared/models/resident.dart';
+import 'package:habitoliving_shared/models/ops.dart';
 import 'package:habitoliving_shared/services/app_services.dart';
+import 'package:habitoliving_shared/services/format.dart';
 import 'package:habitoliving_shared/ui/icons.dart';
 import 'package:habitoliving_shared/ui/tokens.dart';
 import 'package:habitoliving_shared/ui/widgets/app_scaffold.dart';
 import 'package:habitoliving_shared/ui/widgets/primitives.dart';
-import 'package:habitoliving_shared/ui/widgets/states.dart';
+import 'package:habitoliving_shared/ui/widgets/status.dart';
+import '../widgets/future_body.dart';
+import '../widgets/validators.dart';
 
-/// The society's emergency numbers, shown to residents and guards.
+/// The society's emergency numbers.
 ///
-/// When the lift is jammed at 11 PM nobody wants to search for a number.
-/// Keep the list short and current — police, fire, hospital, gate, manager.
-/// The resident app shows exactly what is configured here.
+/// The backend is the single source of truth: what is saved here is what the
+/// resident and guard apps list, and they update live. Each number can be shown
+/// to residents, guards or both, and categories can be your own.
 class EmergencyContactsScreen extends StatefulWidget {
   const EmergencyContactsScreen({super.key});
 
   @override
-  State<EmergencyContactsScreen> createState() =>
-      _EmergencyContactsScreenState();
+  State<EmergencyContactsScreen> createState() => _EmergencyContactsScreenState();
 }
 
 class _EmergencyContactsScreenState extends State<EmergencyContactsScreen> {
   int _revision = 0;
-  late Future<List<EmergencyContact>> _contacts = _load();
 
-  Future<List<EmergencyContact>> _load() =>
-      AppServices.instance.admin.emergencyContacts();
-
-  void _reload() => setState(() {
-    _contacts = _load();
-    _revision++;
-  });
+  Future<void> _edit([ManagedEmergencyContact? contact]) async {
+    final saved = await showModalBottomSheet<bool>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Tokens.surface,
+      builder: (_) => _ContactForm(contact: contact),
+    );
+    if (saved == true && mounted) {
+      showMessage(context, 'Saved. Residents and guards see the change now.');
+      setState(() => _revision++);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
     return AppScaffold(
       title: 'Emergency contacts',
       subtitle: 'Numbers residents and guards see',
-      floatingAction: FloatingActionButton(
-        onPressed: () async {
-          final ok = await showDialog<bool>(
-            context: context,
-            builder: (_) => const _ContactDialog(),
-          );
-          if (ok == true) _reload();
-        },
+      fillBody: true,
+      floatingAction: FloatingActionButton.extended(
+        onPressed: () => _edit(),
         backgroundColor: Tokens.accent,
         foregroundColor: Tokens.accentOn,
-        child: const AppIcon(Icons2.add, size: IconSize.hero),
+        icon: const AppIcon(Icons2.add, size: IconSize.row),
+        label: const Text('Add number'),
       ),
-      body: FutureBuilder<List<EmergencyContact>>(
+      body: FutureBody<List<ManagedEmergencyContact>>(
         key: ValueKey(_revision),
-        future: _contacts,
-        builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting) {
-            return const LoadingList();
-          }
-          if (snapshot.hasError) {
-            return ErrorState(message: '${snapshot.error}', onRetry: _reload);
-          }
-          final items = snapshot.data ?? const <EmergencyContact>[];
-          if (items.isEmpty) {
-            return const EmptyState(
-              icon: Icons2.emergency,
-              title: 'No contacts yet',
-              message:
-                  'Add the numbers residents should dial in an emergency — '
-                  'police, fire, hospital, the gate, the manager.',
-            );
-          }
-          return ListView(
-            padding: const EdgeInsets.only(bottom: Tokens.space8),
-            children: [
-              for (var i = 0; i < items.length; i++)
-                Padding(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: Tokens.space4,
-                  ),
-                  child: Padding(
-                    padding: EdgeInsets.only(
-                      bottom: i == items.length - 1 ? 0 : Tokens.space2,
+        refreshOn: const ['emergency:contacts-changed'],
+        load: AppServices.instance.ops.managedContacts,
+        emptyIcon: Icons2.emergency,
+        emptyTitle: 'No contacts yet',
+        emptyMessage: 'Add the numbers people should dial in an emergency: police, fire, ambulance, the gate, the manager.',
+        builder: (context, items, reload) => ListView.separated(
+          physics: const AlwaysScrollableScrollPhysics(),
+          padding: const EdgeInsets.only(bottom: 96),
+          itemCount: items.length,
+          separatorBuilder: (_, _) => const SizedBox(height: Tokens.space2),
+          itemBuilder: (context, i) {
+            final c = items[i];
+            return Panel(
+              onTap: () => _edit(c),
+              child: Row(
+                children: [
+                  AppIcon(Icons2.emergency, size: IconSize.header, color: Tokens.accent),
+                  const SizedBox(width: Tokens.space4),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(c.name, style: TextStyle(fontFamily: Tokens.fontFamily, fontWeight: FontWeight.w600, color: Tokens.ink)),
+                        Text(
+                          '${c.categoryLabel} · ${Fmt.phone(c.phone)}',
+                          style: TextStyle(fontFamily: Tokens.fontFamily, fontSize: Tokens.typeSm, color: Tokens.inkMuted),
+                        ),
+                        const SizedBox(height: Tokens.space1),
+                        Wrap(
+                          spacing: Tokens.space1,
+                          children: [
+                            MetaTag(c.visibleToResidents ? 'Residents' : 'Hidden from residents'),
+                            MetaTag(c.visibleToGuards ? 'Guards' : 'Hidden from guards'),
+                          ],
+                        ),
+                      ],
                     ),
-                    child: _Card(contact: items[i], onChanged: _reload),
                   ),
-                ),
-            ],
-          );
-        },
-      ),
-    );
-  }
-}
-
-class _Card extends StatelessWidget {
-  const _Card({required this.contact, required this.onChanged});
-
-  final EmergencyContact contact;
-  final VoidCallback onChanged;
-
-  @override
-  Widget build(BuildContext context) {
-    return ListRow(
-      title: contact.name,
-      subtitle: [
-        contact.category,
-        contact.phone ?? 'no number',
-        if (contact.available24x7) '24×7',
-      ].join(' · '),
-      icon: Icons2.emergency,
-      showChevron: false,
-      dense: true,
-      trailing: IconButton(
-        tooltip: 'Remove',
-        icon: AppIcon(
-          Icons2.delete,
-          size: IconSize.row,
-          color: Tokens.inkFaint,
+                  IconButton(
+                    tooltip: 'Remove',
+                    icon: AppIcon(Icons2.delete, size: IconSize.row, color: Tokens.inkFaint),
+                    onPressed: () async {
+                      final ok = await confirmDialog(
+                        context,
+                        title: 'Remove ${c.name}?',
+                        message: 'Residents and guards will no longer see this number.',
+                        confirmLabel: 'Remove',
+                      );
+                      if (!ok || !context.mounted) return;
+                      try {
+                        await AppServices.instance.ops.deleteContact(c.id);
+                        if (context.mounted) showMessage(context, 'Contact removed.');
+                        await reload();
+                      } catch (e) {
+                        if (context.mounted) showMessage(context, friendlyError(e), error: true);
+                      }
+                    },
+                  ),
+                ],
+              ),
+            );
+          },
         ),
-        onPressed: () async {
-          final ok = await confirmDialog(
-            context,
-            title: 'Remove ${contact.name}?',
-            message: 'Residents and guards will no longer see this number.',
-            confirmLabel: 'Remove',
-            destructive: true,
-          );
-          if (!ok || !context.mounted) return;
-          try {
-            await AppServices.instance.admin.deleteEmergencyContact(contact.id);
-            if (context.mounted) showMessage(context, 'Contact removed.');
-            onChanged();
-          } catch (e) {
-            if (context.mounted) showMessage(context, '$e', error: true);
-          }
-        },
       ),
     );
   }
 }
 
-class _ContactDialog extends StatefulWidget {
-  const _ContactDialog();
+class _ContactForm extends StatefulWidget {
+  const _ContactForm({this.contact});
+  final ManagedEmergencyContact? contact;
 
   @override
-  State<_ContactDialog> createState() => _ContactDialogState();
+  State<_ContactForm> createState() => _ContactFormState();
 }
 
-class _ContactDialogState extends State<_ContactDialog> {
-  final _name = TextEditingController();
-  final _phone = TextEditingController();
-  final _description = TextEditingController();
+class _ContactFormState extends State<_ContactForm> {
+  static const _standard = <String>['POLICE', 'FIRE', 'HOSPITAL', 'AMBULANCE', 'GATE', 'MANAGER', 'SECURITY', 'OTHER'];
 
-  static final _categories = <(String, String)>[
-    ('POLICE', 'Police'),
-    ('FIRE', 'Fire'),
-    ('HOSPITAL', 'Hospital'),
-    ('AMBULANCE', 'Ambulance'),
-    ('GATE', 'Gate'),
-    ('MANAGER', 'Society manager'),
-    ('SECURITY', 'Security'),
-    ('OTHER', 'Other'),
-  ];
-
-  String _category = 'POLICE';
-  bool _available24x7 = true;
+  final _form = GlobalKey<FormState>();
+  late final _name = TextEditingController(text: widget.contact?.name ?? '');
+  late final _phone = TextEditingController(text: widget.contact?.phone ?? '');
+  late final _notes = TextEditingController(text: widget.contact?.notes ?? '');
+  final _custom = TextEditingController();
+  late String _category = widget.contact?.category ?? 'POLICE';
+  late bool _residents = widget.contact?.visibleToResidents ?? true;
+  late bool _guards = widget.contact?.visibleToGuards ?? true;
+  bool _custom_ = false;
   bool _busy = false;
   String? _error;
+  late Future<List<CategoryCount>> _used = AppServices.instance.ops.contactCategories();
+
+  static String _label(String v) =>
+      v.split('_').map((w) => w.isEmpty ? w : '${w[0]}${w.substring(1).toLowerCase()}').join(' ');
+
+  @override
+  void initState() {
+    super.initState();
+    if (!_standard.contains(_category)) {
+      _custom_ = true;
+      _custom.text = _label(_category);
+    }
+  }
 
   @override
   void dispose() {
     _name.dispose();
     _phone.dispose();
-    _description.dispose();
+    _notes.dispose();
+    _custom.dispose();
     super.dispose();
   }
 
-  @override
-  Widget build(BuildContext context) {
-    return AlertDialog(
-      backgroundColor: Tokens.surface,
-      title: Text('New emergency contact'),
-      content: SizedBox(
-        width: double.infinity,
-        child: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(
-                controller: _name,
-                autofocus: true,
-                textCapitalization: TextCapitalization.words,
-                decoration: const InputDecoration(
-                  labelText: 'Name',
-                  hintText: 'MG Road Police Station',
-                ),
-              ),
-              SizedBox(height: Tokens.space3),
-              TextField(
-                controller: _phone,
-                keyboardType: TextInputType.phone,
-                decoration: const InputDecoration(
-                  labelText: 'Phone',
-                  hintText: '100',
-                ),
-              ),
-              SizedBox(height: Tokens.space3),
-              Wrap(
-                spacing: Tokens.space2,
-                runSpacing: Tokens.space2,
-                children: [
-                  for (final (value, label) in _categories)
-                    ChoiceChip(
-                      label: Text(label),
-                      selected: value == _category,
-                      selectedColor: Tokens.accentTint,
-                      checkmarkColor: Tokens.accent,
-                      onSelected: (_) => setState(() => _category = value),
-                    ),
-                ],
-              ),
-              SizedBox(height: Tokens.space3),
-              Row(
-                children: [
-                  Expanded(
-                    child: Text(
-                      'Available 24×7',
-                      style: TextStyle(
-                        fontFamily: Tokens.fontFamily,
-                        fontSize: Tokens.typeSm,
-                        color: Tokens.ink,
-                      ),
-                    ),
-                  ),
-                  AppSwitch(
-                    value: _available24x7,
-                    onChanged: (v) => setState(() => _available24x7 = v),
-                  ),
-                ],
-              ),
-              SizedBox(height: Tokens.space2),
-              TextField(
-                controller: _description,
-                maxLines: 2,
-                decoration: const InputDecoration(
-                  labelText: 'Note (optional)',
-                  alignLabelWithHint: true,
-                ),
-              ),
-              if (_error != null) ...[
-                SizedBox(height: Tokens.space3),
-                Text(
-                  _error!,
-                  style: TextStyle(
-                    fontFamily: Tokens.fontFamily,
-                    fontSize: Tokens.typeXs,
-                    color: Tokens.danger,
-                  ),
-                ),
-              ],
-            ],
-          ),
-        ),
-      ),
-      actions: [
-        TextButton(
-          onPressed: _busy ? null : () => Navigator.of(context).pop(),
-          child: const Text('Cancel'),
-        ),
-        FilledButton(
-          onPressed: _busy ? null : _create,
-          style: FilledButton.styleFrom(backgroundColor: Tokens.accent),
-          child: _busy
-              ? const SizedBox(
-                  height: 16,
-                  width: 16,
-                  child: CircularProgressIndicator(strokeWidth: 2),
-                )
-              : const Text('Add'),
-        ),
-      ],
-    );
-  }
-
-  Future<void> _create() async {
-    final name = _name.text.trim();
-    final phone = _phone.text.trim();
-    if (name.isEmpty || phone.isEmpty) {
-      setState(() => _error = 'Name and phone are required.');
-      return;
-    }
+  Future<void> _save() async {
+    if (!_form.currentState!.validate()) return;
     setState(() {
       _busy = true;
       _error = null;
     });
     try {
-      await AppServices.instance.admin.createEmergencyContact(
-        name: name,
-        category: _category,
-        phone: phone,
-        available24x7: _available24x7,
-        description: _description.text.trim().isEmpty
-            ? null
-            : _description.text.trim(),
+      await AppServices.instance.ops.saveContact(
+        id: widget.contact?.id,
+        name: _name.text,
+        phone: _phone.text,
+        category: _custom_ ? _custom.text : _category,
+        notes: _notes.text,
+        visibleToResidents: _residents,
+        visibleToGuards: _guards,
       );
-      if (!mounted) return;
-      Navigator.of(context).pop(true);
+      if (mounted) Navigator.of(context).pop(true);
     } catch (e) {
-      if (!mounted) return;
-      setState(() {
-        _busy = false;
-        _error = '$e';
-      });
+      if (mounted) {
+        setState(() {
+          _busy = false;
+          _error = friendlyError(e);
+        });
+      }
     }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final inset = MediaQuery.of(context).viewInsets.bottom;
+    return Padding(
+      padding: EdgeInsets.fromLTRB(Tokens.space5, Tokens.space5, Tokens.space5, Tokens.space5 + inset),
+      child: SingleChildScrollView(
+        child: Form(
+          key: _form,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text(
+                widget.contact == null ? 'New emergency contact' : 'Edit contact',
+                style: TextStyle(fontFamily: Tokens.fontFamily, fontSize: Tokens.typeMd, fontWeight: FontWeight.w600, color: Tokens.ink),
+              ),
+              const SizedBox(height: Tokens.space4),
+              TextFormField(controller: _name, validator: Validators.required, textCapitalization: TextCapitalization.words, decoration: const InputDecoration(labelText: 'Name', hintText: 'MG Road Police Station')),
+              const SizedBox(height: Tokens.space3),
+              TextFormField(
+                controller: _phone,
+                keyboardType: TextInputType.phone,
+                validator: (v) => (v ?? '').trim().length < 3 ? 'Enter a number' : null,
+                decoration: const InputDecoration(labelText: 'Phone', hintText: '100'),
+              ),
+              const SizedBox(height: Tokens.space3),
+              FutureBuilder<List<CategoryCount>>(
+                future: _used,
+                builder: (context, snap) {
+                  final extra = [
+                    for (final c in snap.data ?? const <CategoryCount>[])
+                      if (!_standard.contains(c.category)) c.category,
+                  ];
+                  final all = [..._standard, ...extra];
+                  final current = _custom_ ? '__custom' : _category;
+                  return DropdownButtonFormField<String>(
+                    initialValue: all.contains(current) || current == '__custom' ? current : null,
+                    decoration: const InputDecoration(labelText: 'Category'),
+                    items: [
+                      for (final c in all) DropdownMenuItem(value: c, child: Text(_label(c))),
+                      const DropdownMenuItem(value: '__custom', child: Text('New category…')),
+                    ],
+                    onChanged: (v) => setState(() {
+                      if (v == '__custom') {
+                        _custom_ = true;
+                      } else {
+                        _custom_ = false;
+                        _category = v ?? _category;
+                      }
+                    }),
+                  );
+                },
+              ),
+              if (_custom_) ...[
+                const SizedBox(height: Tokens.space3),
+                TextFormField(controller: _custom, validator: Validators.required, textCapitalization: TextCapitalization.words, decoration: const InputDecoration(labelText: 'Category name', hintText: 'Blood bank')),
+              ],
+              const SizedBox(height: Tokens.space3),
+              TextFormField(controller: _notes, maxLines: 2, decoration: const InputDecoration(labelText: 'Note (optional)', alignLabelWithHint: true)),
+              const SizedBox(height: Tokens.space4),
+              Row(
+                children: [
+                  Expanded(child: Text('Show to residents', style: TextStyle(fontFamily: Tokens.fontFamily, color: Tokens.ink))),
+                  AppSwitch(value: _residents, onChanged: (v) => setState(() => _residents = v)),
+                ],
+              ),
+              const SizedBox(height: Tokens.space2),
+              Row(
+                children: [
+                  Expanded(child: Text('Show to guards', style: TextStyle(fontFamily: Tokens.fontFamily, color: Tokens.ink))),
+                  AppSwitch(value: _guards, onChanged: (v) => setState(() => _guards = v)),
+                ],
+              ),
+              if (_error != null) ...[
+                const SizedBox(height: Tokens.space3),
+                Text(_error!, style: TextStyle(fontFamily: Tokens.fontFamily, fontSize: Tokens.typeSm, color: Tokens.danger)),
+              ],
+              const SizedBox(height: Tokens.space5),
+              FilledButton(
+                onPressed: _busy ? null : _save,
+                style: FilledButton.styleFrom(backgroundColor: Tokens.accent, foregroundColor: Tokens.accentOn, minimumSize: const Size.fromHeight(48)),
+                child: _busy ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2)) : const Text('Save'),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 }

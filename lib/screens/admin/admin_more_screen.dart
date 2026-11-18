@@ -16,7 +16,14 @@ import '../settings_screen.dart';
 import 'charges_screen.dart';
 import 'expenses_screen.dart';
 import 'administrators_screen.dart';
+import 'gates_screen.dart';
 import 'guards_screen.dart';
+import '../calls/call_contacts_screen.dart';
+import 'community_moderation_screen.dart';
+import 'emergency_alarms_screen.dart';
+import 'helpdesk_screen.dart';
+import 'platform_monitor_screen.dart';
+import 'society_info_screen.dart';
 import 'vehicles_parking_screen.dart';
 import 'amenities_screen.dart';
 import 'marketplace_admin_screen.dart';
@@ -26,7 +33,6 @@ import 'posts_screen.dart';
 import 'incidents_screen.dart';
 import 'emergency_contacts_screen.dart';
 import 'setup/roles_screen.dart';
-import 'setup/setup_home_screen.dart';
 import 'setup/staff_screen.dart';
 import 'setup/vendors_screen.dart';
 
@@ -46,7 +52,7 @@ class AdminMoreScreen extends StatelessWidget {
 
     return AppScaffold(
       title: 'More',
-      subtitle: 'Setup and building',
+      subtitle: 'Your society',
       body: ListView(
         padding: const EdgeInsets.only(bottom: Tokens.space8),
         children: [
@@ -70,11 +76,11 @@ class AdminMoreScreen extends StatelessWidget {
             child: Column(
               children: [
                 ListRow(
-                  title: 'Society setup',
-                  subtitle: 'Towers, floors, flats, gates and blocks',
-                  icon: Icons2.setup,
+                  title: 'Property details',
+                  subtitle: 'Towers, units, floor plans and hospitals (set by the platform team)',
+                  icon: Icons2.property,
                   onTap: () => Navigator.of(context).push(
-                    MaterialPageRoute(builder: (_) => const SetupHomeScreen()),
+                    MaterialPageRoute(builder: (_) => const SocietyInfoScreen()),
                   ),
                 ),
                 const Hairline(),
@@ -84,6 +90,15 @@ class AdminMoreScreen extends StatelessWidget {
                   icon: Icons2.roles,
                   onTap: () => Navigator.of(context).push(
                     MaterialPageRoute(builder: (_) => const RolesScreen()),
+                  ),
+                ),
+                const Hairline(),
+                ListRow(
+                  title: 'Gates',
+                  subtitle: 'Where guards are posted',
+                  icon: Icons2.gate,
+                  onTap: () => Navigator.of(context).push(
+                    MaterialPageRoute(builder: (_) => const GatesScreen()),
                   ),
                 ),
                 const Hairline(),
@@ -142,6 +157,52 @@ class AdminMoreScreen extends StatelessWidget {
                     MaterialPageRoute(
                       builder: (_) => const VehiclesParkingScreen(),
                     ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+
+          const SizedBox(height: Tokens.space6),
+          const SectionLabel('Safety and communication'),
+          const SizedBox(height: Tokens.space2),
+          Panel(
+            margin: const EdgeInsets.symmetric(horizontal: Tokens.space4),
+            child: Column(
+              children: [
+                ListRow(
+                  title: 'Emergencies',
+                  subtitle: 'Live alarms, who raised them, responses',
+                  icon: Icons2.panic,
+                  onTap: () => Navigator.of(context).push(
+                    MaterialPageRoute(builder: (_) => const EmergencyAlarmsScreen()),
+                  ),
+                ),
+                const Hairline(),
+                ListRow(
+                  title: 'Helpdesk',
+                  subtitle: 'Plumber, mechanic, doctor and other numbers',
+                  icon: Icons2.directory,
+                  onTap: () => Navigator.of(context).push(
+                    MaterialPageRoute(builder: (_) => const HelpdeskScreen()),
+                  ),
+                ),
+                const Hairline(),
+                ListRow(
+                  title: 'Calls',
+                  subtitle: 'Call residents and guards in the app',
+                  icon: Icons2.phone,
+                  onTap: () => Navigator.of(context).push(
+                    MaterialPageRoute(builder: (_) => const CallContactsScreen()),
+                  ),
+                ),
+                const Hairline(),
+                ListRow(
+                  title: 'Platform',
+                  subtitle: 'Sign-ins and access errors in your society',
+                  icon: Icons2.monitoring,
+                  onTap: () => Navigator.of(context).push(
+                    MaterialPageRoute(builder: (_) => const PlatformMonitorScreen()),
                   ),
                 ),
               ],
@@ -255,7 +316,18 @@ class AdminMoreScreen extends StatelessWidget {
                 const Hairline(),
                 ListRow(
                   title: 'Community posts',
-                  subtitle: 'Moderation view, every status',
+                  subtitle: 'Review pending, approved and rejected posts',
+                  icon: Icons2.community,
+                  onTap: () => Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) => const CommunityModerationScreen(),
+                    ),
+                  ),
+                ),
+                const Hairline(),
+                ListRow(
+                  title: 'Published posts',
+                  subtitle: 'Remove a post that is already live',
                   icon: Icons2.community,
                   onTap: () => Navigator.of(context).push(
                     MaterialPageRoute(builder: (_) => const PostsScreen()),

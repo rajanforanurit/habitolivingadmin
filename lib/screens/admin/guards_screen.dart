@@ -101,7 +101,19 @@ class _Card extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final inactive = guard.status.toUpperCase() != 'ACTIVE';
-    return Container(
+    return InkWell(
+      borderRadius: BorderRadius.circular(Tokens.radiusMd),
+      onTap: () async {
+        final saved = await showDialog<bool>(
+          context: context,
+          builder: (_) => _EditGuardDialog(guard: guard),
+        );
+        if (saved == true) {
+          onChanged();
+          if (context.mounted) showMessage(context, 'Guard updated.');
+        }
+      },
+      child: Container(
       padding: EdgeInsets.all(Tokens.space3),
       decoration: BoxDecoration(
         color: Tokens.surface,
@@ -186,6 +198,111 @@ class _Card extends StatelessWidget {
           ),
         ],
       ),
+    ),
+    );
+  }
+}
+
+/// Edit a guard's name and mobile. The mobile is their sign-in, so the backend
+/// rejects a number another account already uses.
+class _EditGuardDialog extends StatefulWidget {
+  const _EditGuardDialog({required this.guard});
+  final Guard guard;
+
+  @override
+  State<_EditGuardDialog> createState() => _EditGuardDialogState();
+}
+
+class _EditGuardDialogState extends State<_EditGuardDialog> {
+  late final _name = TextEditingController(text: widget.guard.name);
+  late final _mobile = TextEditingController(text: widget.guard.phone ?? '');
+  bool _busy = false;
+  String? _error;
+
+  @override
+  void dispose() {
+    _name.dispose();
+    _mobile.dispose();
+    super.dispose();
+  }
+
+  Future<void> _save() async {
+    final name = _name.text.trim();
+    final mobile = _mobile.text.trim();
+    if (name.length < 2) {
+      setState(() => _error = 'Enter the guard\'s name.');
+      return;
+    }
+    if (!RegExp(r'^\+?[1-9][\d\s-]{8,16}$').hasMatch(mobile)) {
+      setState(() => _error = 'Enter a valid mobile number.');
+      return;
+    }
+    setState(() {
+      _busy = true;
+      _error = null;
+    });
+    try {
+      await AppServices.instance.admin.updateGuard(widget.guard.id, {
+        if (name != widget.guard.name) 'name': name,
+        if (mobile != widget.guard.phone) 'mobile': mobile,
+      });
+      if (mounted) Navigator.of(context).pop(true);
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _busy = false;
+          _error = '$e';
+        });
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      backgroundColor: Tokens.surface,
+      title: const Text('Edit guard'),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          TextField(
+            controller: _name,
+            textCapitalization: TextCapitalization.words,
+            decoration: const InputDecoration(labelText: 'Name'),
+          ),
+          SizedBox(height: Tokens.space3),
+          TextField(
+            controller: _mobile,
+            keyboardType: TextInputType.phone,
+            decoration: const InputDecoration(
+              labelText: 'Mobile (sign-in)',
+              helperText: 'Changing it changes how the guard signs in',
+            ),
+          ),
+          if (_error != null) ...[
+            SizedBox(height: Tokens.space3),
+            Text(
+              _error!,
+              style: TextStyle(
+                fontFamily: Tokens.fontFamily,
+                fontSize: Tokens.typeXs,
+                color: Tokens.danger,
+              ),
+            ),
+          ],
+        ],
+      ),
+      actions: [
+        TextButton(
+          onPressed: _busy ? null : () => Navigator.of(context).pop(),
+          child: const Text('Cancel'),
+        ),
+        FilledButton(
+          onPressed: _busy ? null : _save,
+          style: FilledButton.styleFrom(backgroundColor: Tokens.accent),
+          child: const Text('Save'),
+        ),
+      ],
     );
   }
 }
