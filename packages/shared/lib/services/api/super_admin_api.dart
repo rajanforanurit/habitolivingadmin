@@ -151,45 +151,6 @@ class SuperAdminApi {
     );
   }
 
-  /// Approve a pending registration and create its administrator. The
-  /// password is the administrator's first sign-in password.
-  Future<void> approveRegistration(
-    String id, {
-    required String password,
-    String? name,
-    String? mobile,
-    String? email,
-    String? designation,
-    String? notes,
-    required String propertyType,
-    required PropertyDetails propertyDetails,
-    List<Hospital> hospitals = const [],
-  }) async {
-    bool has(String? v) => v != null && v.trim().isNotEmpty;
-    await _api.post(
-      '/super-admin/societies/$id/approve',
-      body: {
-        'password': password,
-        if (has(name)) 'name': name!.trim(),
-        if (has(mobile)) 'mobile': mobile!.trim(),
-        if (has(email)) 'email': email!.trim(),
-        if (has(designation)) 'designation': designation!.trim(),
-        if (has(notes)) 'notes': notes!.trim(),
-        'propertyType': propertyType,
-        'propertyDetails': propertyDetails.toJson(),
-        if (hospitals.isNotEmpty)
-          'hospitals': hospitals.map((h) => h.toJson()).toList(),
-      },
-    );
-  }
-
-  Future<void> rejectRegistration(String id, {required String reason}) async {
-    await _api.post(
-      '/super-admin/societies/$id/reject',
-      body: {'reason': reason.trim()},
-    );
-  }
-
   Future<void> updateSociety(String id, Map<String, dynamic> body) async {
     await _api.patch('/super-admin/societies/$id', body: body);
   }
@@ -282,6 +243,60 @@ class SuperAdminApi {
   Future<List<Map<String, dynamic>>> adminActivity(String id) async {
     final data = await _api.get('/super-admin/admins/$id/activity');
     return asMapList(data);
+  }
+
+  // ------------------------------------------------- society roles & vendors
+
+  /// The roles an administrator of [societyId] can be given.
+  Future<List<Role>> societyRoles(String societyId) async {
+    final data = await _api.get('/super-admin/societies/$societyId/roles');
+    return asMapList(data).map(Role.fromJson).toList(growable: false);
+  }
+
+  /// Vendors of one society. Only the Super Admin can add or change them.
+  Future<PageResult<Vendor>> societyVendors(
+    String societyId, {
+    int page = 1,
+    int limit = 50,
+  }) async {
+    final data = await _api.get(
+      '/super-admin/societies/$societyId/vendors',
+      query: {'page': '$page', 'limit': '$limit'},
+    );
+    return PageResult.from(data, _api.lastMeta, Vendor.fromJson);
+  }
+
+  Future<Vendor> createSocietyVendor(
+    String societyId, {
+    required String name,
+    required String category,
+    required String mobile,
+    String? contactName,
+    String? email,
+  }) async {
+    final data = await _api.post(
+      '/super-admin/societies/$societyId/vendors',
+      body: {
+        'name': name,
+        'category': category,
+        'mobile': mobile,
+        if (contactName != null && contactName.isNotEmpty)
+          'contactPerson': contactName,
+        if (email != null && email.isNotEmpty) 'email': email,
+      },
+    );
+    return Vendor.fromJson(reqMap(data, field: 'vendor'));
+  }
+
+  Future<void> updateSocietyVendor(
+    String societyId,
+    String vendorId,
+    Map<String, dynamic> body,
+  ) async {
+    await _api.patch(
+      '/super-admin/societies/$societyId/vendors/$vendorId',
+      body: body,
+    );
   }
 
   // ------------------------------------------------------------- security

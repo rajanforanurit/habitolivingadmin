@@ -381,48 +381,12 @@ class AdminApi {
 
   // ------------------------------------------------------------- administrators
 
+  /// Read-only: only the Super Admin adds or changes administrators.
   Future<List<AdminUser>> admins() async {
     final data = await _api.get('/admin/admins');
     return asMapList(data).map(AdminUser.fromJson).toList(growable: false);
   }
 
-  Future<AdminUser> createAdmin({
-    required String name,
-    required String mobile,
-    String? email,
-    required String roleId,
-    String? password,
-    String? designation,
-  }) async {
-    final data = await _api.post(
-      '/admin/admins',
-      body: {
-        'name': name,
-        'mobile': mobile,
-        if (email != null && email.isNotEmpty) 'email': email,
-        'roleId': roleId,
-        if (password != null && password.isNotEmpty) 'password': password,
-        if (designation != null && designation.isNotEmpty)
-          'designation': designation,
-      },
-    );
-    return AdminUser.fromJson(reqMap(data, field: 'admin'));
-  }
-
-  Future<void> updateAdmin(String id, Map<String, dynamic> body) async {
-    await _api.patch('/admin/admins/$id', body: body);
-  }
-
-  Future<void> deactivateAdmin(String id) async {
-    await _api.patch('/admin/admins/$id', body: {'status': 'INACTIVE'});
-  }
-
-  /// Revoke all sessions for an admin and set a temporary password.
-  /// Returns `{ temporaryPassword }` — shown once, then discarded.
-  Future<Map<String, dynamic>> resetAdminAccess(String id) async {
-    final data = await _api.post('/admin/admins/$id/reset-access');
-    return reqMap(data, field: 'result');
-  }
 
   // ------------------------------------------------------------- security
 
@@ -748,37 +712,13 @@ class AdminApi {
     return reqMap(data, field: 'items');
   }
 
+  /// Read-only: only the Super Admin adds or changes vendors.
   Future<PageResult<Vendor>> vendors({int page = 1, int limit = 20}) async {
     final data = await _api.get(
       '/admin/vendors',
       query: {'page': '$page', 'limit': '$limit'},
     );
     return PageResult.from(data, _api.lastMeta, Vendor.fromJson);
-  }
-
-  Future<Vendor> createVendor({
-    required String name,
-    required String category,
-    String? contactName,
-    String? phone,
-    String? email,
-  }) async {
-    final data = await _api.post(
-      '/admin/vendors',
-      body: {
-        'name': name,
-        'category': category,
-        if (contactName != null && contactName.isNotEmpty)
-          'contactName': contactName,
-        if (phone != null && phone.isNotEmpty) 'phone': phone,
-        if (email != null && email.isNotEmpty) 'email': email,
-      },
-    );
-    return Vendor.fromJson(reqMap(data, field: 'vendor'));
-  }
-
-  Future<void> updateVendor(String id, Map<String, dynamic> body) async {
-    await _api.patch('/admin/vendors/$id', body: body);
   }
 
   Future<PageResult<ServiceProvider>> serviceProviders({

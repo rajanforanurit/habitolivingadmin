@@ -299,8 +299,8 @@ class _Charges extends StatelessWidget {
                 icon: Icons2.finance,
                 title: 'No charges configured',
                 message:
-                    'Add a maintenance charge under Finance → Charges before '
-                    'generating invoices.',
+                    'This society has no charges set up yet, so there is '
+                    'nothing to invoice.',
               ),
             ),
           );

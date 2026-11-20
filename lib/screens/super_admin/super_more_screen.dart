@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 
 import '../../app.dart';
-import 'package:habitoliving_shared/models/admin.dart';
 import 'package:habitoliving_shared/models/json.dart';
 import 'package:habitoliving_shared/services/app_services.dart';
 import 'package:habitoliving_shared/services/format.dart';
@@ -14,7 +13,7 @@ import '../root_shell.dart' show confirmAndLogout;
 import '../settings_screen.dart';
 import '../widgets/future_body.dart';
 
-/// Account, platform announcements, the audit trail and sign-out.
+/// Account, platform announcements and sign-out.
 class SuperMoreScreen extends StatelessWidget {
   const SuperMoreScreen({super.key});
 
@@ -62,13 +61,6 @@ class SuperMoreScreen extends StatelessWidget {
                   subtitle: 'Messages to society admins',
                   icon: Icons2.communications,
                   onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const _AnnouncementsScreen())),
-                ),
-                const Hairline(),
-                ListRow(
-                  title: 'Audit log',
-                  subtitle: 'Who changed what, platform-wide',
-                  icon: Icons2.audit,
-                  onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const _AuditScreen())),
                 ),
               ],
             ),
@@ -266,42 +258,6 @@ class _AnnouncementDialogState extends State<_AnnouncementDialog> {
           child: const Text('Send'),
         ),
       ],
-    );
-  }
-}
-
-class _AuditScreen extends StatelessWidget {
-  const _AuditScreen();
-
-  @override
-  Widget build(BuildContext context) {
-    return AppScaffold(
-      title: 'Audit log',
-      subtitle: 'Recent platform activity',
-      fillBody: true,
-      body: FutureBody<List<AuditLog>>(
-        load: () => AppServices.instance.superAdmin.auditLogs(limit: 100),
-        emptyIcon: Icons2.audit,
-        emptyTitle: 'No activity recorded',
-        builder: (context, logs, _) => ListView.separated(
-          physics: const AlwaysScrollableScrollPhysics(),
-          padding: const EdgeInsets.only(bottom: Tokens.space8),
-          itemCount: logs.length,
-          separatorBuilder: (_, _) => const SizedBox(height: Tokens.space2),
-          itemBuilder: (context, i) => Panel(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(logs[i].action, style: TextStyle(fontFamily: Tokens.fontFamily, fontWeight: FontWeight.w600, color: Tokens.ink)),
-                Text(
-                  [if (logs[i].actorName != null) logs[i].actorName!, Fmt.dateTime(logs[i].createdAt)].join(' · '),
-                  style: TextStyle(fontFamily: Tokens.fontFamily, fontSize: Tokens.typeXs, color: Tokens.inkFaint),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
     );
   }
 }

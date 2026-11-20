@@ -271,49 +271,6 @@ class AuthService {
     ).map(SocietySearchResult.fromJson).toList(growable: false);
   }
 
-  /// Submit a new-society registration request. The platform approves it.
-  /// Public "list your society" request — creates a PENDING society awaiting
-  /// platform approval. Body matches `registerSocietyBody` exactly.
-  Future<SocietySearchResult> registerSociety({
-    required String name,
-    required String code,
-    required String type,
-    String? city,
-    String? state,
-    String? address,
-    int? totalUnits,
-    required String adminName,
-    required String adminMobile,
-    String? adminEmail,
-    String? notes,
-  }) async {
-    final data = await _api.post(
-      '/auth/societies/register',
-      body: {
-        'name': name,
-        'code': code.toUpperCase(),
-        'type': type,
-        if ((address != null && address.isNotEmpty) ||
-            (city != null && city.isNotEmpty) ||
-            (state != null && state.isNotEmpty))
-          'address': {
-            if (address != null && address.isNotEmpty) 'line1': address,
-            if (city != null && city.isNotEmpty) 'city': city,
-            if (state != null && state.isNotEmpty) 'state': state,
-          },
-        if (totalUnits != null) 'totalUnits': totalUnits,
-        'applicant': {
-          'name': adminName,
-          'mobile': adminMobile,
-          if (adminEmail != null && adminEmail.isNotEmpty) 'email': adminEmail,
-          if (notes != null && notes.isNotEmpty) 'notes': notes,
-        },
-      },
-      auth: false,
-    );
-    return SocietySearchResult.fromJson(reqMap(data, field: 'data'));
-  }
-
   // -------------------------------------------------------------- private
 
   Future<void> _applyLoginResponse(dynamic data) async {

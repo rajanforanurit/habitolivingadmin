@@ -10,11 +10,11 @@ import 'package:habitoliving_shared/ui/tokens.dart';
 import 'package:habitoliving_shared/ui/widgets/app_scaffold.dart';
 import 'package:habitoliving_shared/ui/widgets/primitives.dart';
 import 'package:habitoliving_shared/ui/widgets/status.dart';
-import '../widgets/file_preview.dart';
 import '../widgets/future_body.dart';
 import '../widgets/property_info_form.dart';
-import '../widgets/validators.dart';
 import 'super_societies_tab.dart';
+import 'super_society_administrators_screen.dart';
+import 'super_society_vendors_screen.dart';
 
 class _Detail {
   const _Detail(this.society, this.info, this.administration);
@@ -26,8 +26,8 @@ class _Detail {
   final SocietyAdministration? administration;
 }
 
-/// One society as the platform team sees it: status, applicant / admin,
-/// property details and hospitals, with the lifecycle actions.
+/// One society as the platform team sees it: status, administrators, vendors,
+/// property details and hospitals, with the activate / deactivate action.
 class SuperSocietyDetailScreen extends StatefulWidget {
   const SuperSocietyDetailScreen({super.key, required this.societyId});
 
@@ -69,35 +69,6 @@ class _SuperSocietyDetailScreenState extends State<SuperSocietyDetailScreen> {
     }
   }
 
-  Future<void> _approve(_Detail d) async {
-    final ok = await Navigator.of(context).push<bool>(
-      MaterialPageRoute(
-        builder: (_) => _ApproveScreen(society: d.society, info: d.info),
-        fullscreenDialog: true,
-      ),
-    );
-    if (ok == true && mounted) {
-      showMessage(context, 'Society approved. The administrator can sign in now.');
-      setState(() => _revision++);
-    }
-  }
-
-  Future<void> _reject(_Detail d) async {
-    final reason = await promptText(
-      context,
-      title: 'Reject ${d.society.name}?',
-      hint: 'Reason (shown to the applicant)',
-      confirmLabel: 'Reject',
-      required: true,
-      destructive: true,
-    );
-    if (reason == null) return;
-    await _run(
-      () => AppServices.instance.superAdmin.rejectRegistration(d.society.id, reason: reason),
-      'Registration rejected.',
-    );
-  }
-
   Future<void> _deactivate(_Detail d) async {
     final reason = await promptText(
       context,
@@ -111,6 +82,11 @@ class _SuperSocietyDetailScreenState extends State<SuperSocietyDetailScreen> {
       () => AppServices.instance.superAdmin.deactivateSociety(d.society.id, reason: reason),
       'Society deactivated. Its users can no longer sign in.',
     );
+  }
+
+  Future<void> _open(Widget screen) async {
+    await Navigator.of(context).push(MaterialPageRoute(builder: (_) => screen));
+    if (mounted) setState(() => _revision++);
   }
 
   Future<void> _editProperty(_Detail d) async {
@@ -148,25 +124,24 @@ class _SuperSocietyDetailScreenState extends State<SuperSocietyDetailScreen> {
                       style: TextStyle(fontFamily: Tokens.fontFamily, fontSize: Tokens.typeLg, fontWeight: FontWeight.w600, color: Tokens.ink),
                     ),
                   ),
-                  StatusBadge(label: s.status, tone: societyTone(raw)),
+                  StatusBadge(label: societyStatusLabel(raw), tone: societyTone(raw)),
                 ],
               ),
               const SizedBox(height: Tokens.space4),
-              if (raw == 'PENDING') _PendingBanner(onApprove: () => _approve(d), onReject: () => _reject(d), busy: _busy),
+              // Societies are only ever Active or Inactive: the Super Admin creates them, so
+              // there is nothing to approve.
               if (raw == 'ACTIVE')
                 OutlinedButton.icon(
                   onPressed: _busy ? null : () => _deactivate(d),
                   icon: const AppIcon(Icons2.cancel, size: IconSize.inline),
                   label: const Text('Deactivate society'),
-                ),
-              if (raw == 'INACTIVE' || raw == 'REJECTED')
+                )
+              else
                 FilledButton.icon(
                   style: FilledButton.styleFrom(backgroundColor: Tokens.accent, foregroundColor: Tokens.accentOn),
-                  onPressed: _busy
-                      ? null
-                      : () => raw == 'REJECTED' ? _approve(d) : _run(() => AppServices.instance.superAdmin.activateSociety(s.id), 'Society activated.'),
+                  onPressed: _busy ? null : () => _run(() => AppServices.instance.superAdmin.activateSociety(s.id), 'Society activated.'),
                   icon: const AppIcon(Icons2.success, size: IconSize.inline),
-                  label: Text(raw == 'REJECTED' ? 'Approve instead' : 'Activate society'),
+                  label: const Text('Activate society'),
                 ),
               const SizedBox(height: Tokens.space5),
               const SectionLabel('Overview'),
@@ -176,19 +151,35 @@ class _SuperSocietyDetailScreenState extends State<SuperSocietyDetailScreen> {
                   children: [
                     if (s.code != null) DetailRow(label: 'Society code', value: s.code!),
                     DetailRow(label: 'Property type', value: PropertyKind.label(d.info.propertyType ?? s.propertyType)),
-                    if (d.info.propertyDetails.totalUnits != null) DetailRow(label: 'Total units', value: '${d.info.propertyDetails.totalUnits}'),
+                    if (d.info.propertyDetails.totalUnits != null) DetailRow(label: (d.info.propertyType ?? s.propertyType) == PropertyKind.singleFamily ? 'Total houses' : 'Total units', value: '${d.info.propertyDetails.totalUnits}'),
                     DetailRow(label: 'Location', value: [s.city, s.state].whereType<String>().join(', ').isEmpty ? '—' : [s.city, s.state].whereType<String>().join(', ')),
                     if (s.plan != null) DetailRow(label: 'Plan', value: s.plan!),
                     DetailRow(label: 'Residents', value: '${s.residentCount}'),
-                    if (s.createdAt != null) DetailRow(label: 'Registered', value: Fmt.date(s.createdAt)),
+                    if (s.createdAt != null) DetailRow(label: 'Created', value: Fmt.date(s.createdAt)),
                   ],
                 ),
               ),
               const SizedBox(height: Tokens.space5),
-              _AdministrationView(administration: d.administration, society: s),
+              _AdministrationView(
+                administration: d.administration,
+                onManage: () => _open(SuperSocietyAdministratorsScreen(societyId: s.id, societyName: s.name)),
+              ),
+              const SizedBox(height: Tokens.space5),
+              const SectionLabel('Vendors'),
+              const SizedBox(height: Tokens.space2),
+              Panel(
+                child: ListRow(
+                  title: 'Vendors',
+                  subtitle: 'Add and manage the companies this society hires',
+                  icon: Icons2.vendors,
+                  dense: true,
+                  showChevron: true,
+                  onTap: () => _open(SuperSocietyVendorsScreen(societyId: s.id, societyName: s.name)),
+                ),
+              ),
               const SizedBox(height: Tokens.space5),
               SectionLabel(
-                'Property and floor plans',
+                'Property',
                 trailing: TextButton.icon(
                   onPressed: () => _editProperty(d),
                   icon: const AppIcon(Icons2.edit, size: IconSize.inline),
@@ -210,12 +201,21 @@ class _SuperSocietyDetailScreenState extends State<SuperSocietyDetailScreen> {
 }
 
 /// Who runs the society, read from the saved records: administrators with their
-/// contact details, role, status and last sign-in, plus who created or approved
-/// the society and, for self-registered societies, the original applicant.
+/// contact details, role, status and last sign-in, plus who created the society.
+/// "Manage" opens the screen where the Super Admin adds and manages administrators.
 class _AdministrationView extends StatelessWidget {
-  const _AdministrationView({required this.administration, required this.society});
+  const _AdministrationView({required this.administration, required this.onManage});
   final SocietyAdministration? administration;
-  final PlatformSociety society;
+  final VoidCallback onManage;
+
+  Widget get _label => SectionLabel(
+    'Administrators',
+    trailing: TextButton.icon(
+      onPressed: onManage,
+      icon: const AppIcon(Icons2.edit, size: IconSize.inline),
+      label: const Text('Manage'),
+    ),
+  );
 
   TextStyle get _muted => TextStyle(fontFamily: Tokens.fontFamily, fontSize: Tokens.typeSm, color: Tokens.inkMuted, height: 1.4);
 
@@ -229,10 +229,11 @@ class _AdministrationView extends StatelessWidget {
           const SectionLabel('Administration details'),
           const SizedBox(height: Tokens.space2),
           Panel(child: Text('Could not load the administration details. Pull down to refresh.', style: _muted)),
+          const SizedBox(height: Tokens.space4),
+          _label,
         ],
       );
     }
-    final pending = society.rawStatus == 'PENDING';
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -243,21 +244,13 @@ class _AdministrationView extends StatelessWidget {
             children: [
               if (a.createdAt != null)
                 DetailRow(label: 'Created', value: [Fmt.date(a.createdAt), if (a.createdByName != null) 'by ${a.createdByName}'].join(' ')),
-              if (a.approvedAt != null)
-                DetailRow(label: 'Approved', value: [Fmt.date(a.approvedAt), if (a.approvedByName != null) 'by ${a.approvedByName}'].join(' ')),
               DetailRow(label: 'Administrators', value: '${a.administrators.length} (${a.administrators.where((x) => x.isActive).length} active)'),
               if ((a.statusReason ?? '').isNotEmpty) DetailRow(label: 'Status note', value: a.statusReason!),
-              if (a.hasApplicant) ...[
-                if (a.applicantName != null) DetailRow(label: 'Applicant', value: a.applicantName!),
-                if (a.applicantMobile != null) DetailRow(label: 'Applicant mobile', value: Fmt.phone(a.applicantMobile)),
-                if (a.applicantEmail != null) DetailRow(label: 'Applicant email', value: a.applicantEmail!),
-                if ((a.applicantNotes ?? '').isNotEmpty) DetailRow(label: 'Applicant notes', value: a.applicantNotes!),
-              ],
             ],
           ),
         ),
         const SizedBox(height: Tokens.space4),
-        const SectionLabel('Administrators'),
+        _label,
         const SizedBox(height: Tokens.space2),
         if (a.administrators.isEmpty)
           Panel(
@@ -267,9 +260,7 @@ class _AdministrationView extends StatelessWidget {
                 const SizedBox(width: Tokens.space3),
                 Expanded(
                   child: Text(
-                    pending
-                        ? 'No administrator yet. One is created when you approve this registration.'
-                        : 'No administrator has been assigned to this society.',
+                    'No administrator has been assigned to this society. Tap Manage to add one.',
                     style: _muted,
                   ),
                 ),
@@ -333,54 +324,6 @@ class _AdministratorCard extends StatelessWidget {
   }
 }
 
-class _PendingBanner extends StatelessWidget {
-  const _PendingBanner({required this.onApprove, required this.onReject, required this.busy});
-  final VoidCallback onApprove;
-  final VoidCallback onReject;
-  final bool busy;
-
-  @override
-  Widget build(BuildContext context) {
-    return Panel(
-      color: Tokens.warningTint,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            'Awaiting your verification',
-            style: TextStyle(fontFamily: Tokens.fontFamily, fontWeight: FontWeight.w600, color: Tokens.ink),
-          ),
-          const SizedBox(height: Tokens.space1),
-          Text(
-            'Approving creates the society administrator account and unlocks sign-in. Add the floor plan and hospitals now, or later from this page.',
-            style: TextStyle(fontFamily: Tokens.fontFamily, fontSize: Tokens.typeSm, color: Tokens.inkMuted, height: 1.4),
-          ),
-          const SizedBox(height: Tokens.space4),
-          Row(
-            children: [
-              Expanded(
-                child: FilledButton(
-                  style: FilledButton.styleFrom(backgroundColor: Tokens.accent, foregroundColor: Tokens.accentOn),
-                  onPressed: busy ? null : onApprove,
-                  child: const Text('Approve'),
-                ),
-              ),
-              const SizedBox(width: Tokens.space3),
-              Expanded(
-                child: OutlinedButton(
-                  style: OutlinedButton.styleFrom(foregroundColor: Tokens.danger),
-                  onPressed: busy ? null : onReject,
-                  child: const Text('Reject'),
-                ),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-}
-
 class _PropertyView extends StatelessWidget {
   const _PropertyView({required this.details});
   final PropertyDetails details;
@@ -419,8 +362,8 @@ class _PropertyView extends StatelessWidget {
                 for (var i = 0; i < details.towers.length; i++) ...[
                   if (i > 0) const Hairline(),
                   ListRow(
-                    title: '${details.towers[i].name} (${details.towers[i].code})',
-                    subtitle: '${details.towers[i].floors.length} floors · ${details.towers[i].totalUnits} units',
+                    title: details.towers[i].name,
+                    subtitle: '${details.towers[i].totalUnits} ${details.towers[i].totalUnits == 1 ? 'flat' : 'flats'}',
                     icon: Icons2.tower,
                     dense: true,
                   ),
@@ -435,26 +378,6 @@ class _PropertyView extends StatelessWidget {
             child: DetailRow(
               label: 'Houses',
               value: '${details.singleFamily!.totalHouses} · ${details.singleFamily!.labelAt(0)} … ${details.singleFamily!.labelAt(details.singleFamily!.totalHouses - 1)}',
-            ),
-          ),
-        ],
-        for (final plan in details.floorPlans) ...[
-          const SizedBox(height: Tokens.space3),
-          Panel(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(plan.title, style: TextStyle(fontFamily: Tokens.fontFamily, fontWeight: FontWeight.w600, color: Tokens.ink)),
-                if ((plan.description ?? '').isNotEmpty)
-                  Padding(
-                    padding: const EdgeInsets.only(top: 2),
-                    child: Text(plan.description!, style: TextStyle(fontFamily: Tokens.fontFamily, fontSize: Tokens.typeSm, color: Tokens.inkMuted)),
-                  ),
-                if (plan.fileId != null) ...[
-                  const SizedBox(height: Tokens.space3),
-                  FilePreview(fileId: plan.fileId!),
-                ],
-              ],
             ),
           ),
         ],
@@ -491,128 +414,6 @@ class _HospitalsView extends StatelessWidget {
             ),
           ],
         ],
-      ),
-    );
-  }
-}
-
-/// Approve a pending society: confirm the administrator's credentials and
-/// attach the property details and hospitals in one step.
-class _ApproveScreen extends StatefulWidget {
-  const _ApproveScreen({required this.society, required this.info});
-  final PlatformSociety society;
-  final SocietyInfo info;
-
-  @override
-  State<_ApproveScreen> createState() => _ApproveScreenState();
-}
-
-class _ApproveScreenState extends State<_ApproveScreen> {
-  final _form = GlobalKey<FormState>();
-  final _property = GlobalKey<PropertyInfoEditorState>();
-  late final _name = TextEditingController(text: widget.society.adminName ?? '');
-  late final _mobile = TextEditingController(text: widget.society.adminMobile ?? '');
-  final _email = TextEditingController();
-  final _password = TextEditingController();
-  bool _show = false;
-  bool _busy = false;
-  String? _error;
-
-  @override
-  void dispose() {
-    _name.dispose();
-    _mobile.dispose();
-    _email.dispose();
-    _password.dispose();
-    super.dispose();
-  }
-
-  Future<void> _submit() async {
-    if (!_form.currentState!.validate()) return;
-    final editor = _property.currentState;
-    final problem = editor?.validate();
-    if (editor == null || problem != null) {
-      setState(() => _error = problem ?? 'Configure the property first.');
-      return;
-    }
-    setState(() {
-      _busy = true;
-      _error = null;
-    });
-    try {
-      await AppServices.instance.superAdmin.approveRegistration(
-        widget.society.id,
-        password: _password.text,
-        name: _name.text,
-        mobile: _mobile.text,
-        email: _email.text,
-        propertyType: editor.propertyType!,
-        propertyDetails: editor.details,
-        hospitals: editor.hospitals,
-      );
-      if (mounted) Navigator.of(context).pop(true);
-    } catch (e) {
-      if (mounted) setState(() => _error = friendlyError(e));
-    } finally {
-      if (mounted) setState(() => _busy = false);
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return AppScaffold(
-      title: 'Approve society',
-      subtitle: widget.society.name,
-      bottom: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.all(Tokens.space5),
-          child: FilledButton(
-            onPressed: (_busy || !(_property.currentState?.isLayoutComplete ?? false)) ? null : _submit,
-            style: FilledButton.styleFrom(backgroundColor: Tokens.accent, foregroundColor: Tokens.accentOn, minimumSize: const Size.fromHeight(48)),
-            child: _busy
-                ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
-                : const Text('Approve and create administrator'),
-          ),
-        ),
-      ),
-      body: Form(
-        key: _form,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            const SectionLabel('Administrator account'),
-            const SizedBox(height: Tokens.space2),
-            TextFormField(controller: _name, validator: Validators.required, textCapitalization: TextCapitalization.words, decoration: const InputDecoration(labelText: 'Full name')),
-            const SizedBox(height: Tokens.space3),
-            TextFormField(controller: _mobile, validator: Validators.mobile, keyboardType: TextInputType.phone, decoration: const InputDecoration(labelText: 'Mobile number (login)')),
-            const SizedBox(height: Tokens.space3),
-            TextFormField(controller: _email, validator: Validators.optionalEmail, keyboardType: TextInputType.emailAddress, decoration: const InputDecoration(labelText: 'Email (optional)')),
-            const SizedBox(height: Tokens.space3),
-            TextFormField(
-              controller: _password,
-              obscureText: !_show,
-              validator: Validators.password,
-              decoration: InputDecoration(
-                labelText: 'Initial password',
-                suffixIcon: IconButton(icon: Icon(_show ? Icons.visibility_off : Icons.visibility), onPressed: () => setState(() => _show = !_show)),
-              ),
-            ),
-            const SizedBox(height: Tokens.space6),
-            PropertyInfoEditor(
-              key: _property,
-              initialDetails: widget.info.propertyDetails,
-              initialHospitals: widget.info.hospitals,
-              initialPropertyName: widget.society.name,
-              initialPropertyType: widget.info.propertyType,
-              onChanged: () => setState(() {}),
-            ),
-            if (_error != null) ...[
-              const SizedBox(height: Tokens.space4),
-              Text(_error!, style: TextStyle(fontFamily: Tokens.fontFamily, fontSize: Tokens.typeSm, color: Tokens.danger)),
-            ],
-            const SizedBox(height: Tokens.space6),
-          ],
-        ),
       ),
     );
   }
@@ -680,7 +481,7 @@ class _PropertyEditScreenState extends State<_PropertyEditScreen> {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Text(
-            'Only the platform team can change this. The society admin, residents and guards see it read-only. Towers, floors and units can be added, not removed.',
+            'Only the platform team can change this. The society admin, residents and guards see it read-only. Towers and flats can be added, not removed.',
             style: TextStyle(fontFamily: Tokens.fontFamily, fontSize: Tokens.typeSm, color: Tokens.inkMuted, height: 1.4),
           ),
           const SizedBox(height: Tokens.space5),
@@ -690,7 +491,7 @@ class _PropertyEditScreenState extends State<_PropertyEditScreen> {
             initialHospitals: widget.info.hospitals,
             initialPropertyName: widget.societyName,
             initialPropertyType: widget.info.propertyType,
-            // Older societies may have no layout yet; floor plans and hospitals can still be saved.
+            // Older societies may have no layout yet; the description and hospitals can still be saved.
             layoutRequired: widget.info.propertyType != null || widget.info.propertyDetails.hasLayout,
             lockType: widget.info.propertyType != null,
           ),

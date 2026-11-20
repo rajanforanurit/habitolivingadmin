@@ -7,11 +7,12 @@ import 'package:habitoliving_shared/ui/widgets/primitives.dart';
 
 /// Property type and layout, driven entirely by what the Super Admin enters.
 ///
-/// - **Multifamily**: "Number of towers" generates that many tower cards.
-///   Each tower has its own name, code, floor count and units per floor, and
-///   individual floors can be adjusted. Unit numbers are generated from the
-///   tower code (A-101, A-102 ...). Nothing is pre-filled or hardcoded.
-/// - **Single family**: a house count with a label prefix and start number.
+/// - **Multifamily**: "Number of towers" generates that many tower sections.
+///   Each tower asks for just two things: its name and the names of its flats
+///   (e.g. A-101, A-102). There are no separate floor settings; the floor is
+///   part of the flat name. Nothing is pre-filled or hardcoded.
+/// - **Single family**: "Number of houses / villas" generates that many
+///   entries, and each one asks only for the house / villa name.
 ///
 /// [isComplete] stays false until every tower (or the house block) is fully
 /// configured; screens use it to enable the final create / approve action.
@@ -40,82 +41,88 @@ class PropertyLayoutEditor extends StatefulWidget {
 }
 
 class _TowerRow {
-  _TowerRow({String name = '', String code = '', int floors = 0, int unitsPerFloor = 0, List<int>? floorUnits})
+  _TowerRow({String name = '', List<String>? flats})
     : name = TextEditingController(text: name),
-      code = TextEditingController(text: code),
-      floorCount = TextEditingController(text: floors == 0 ? '' : '$floors'),
-      unitsPerFloor = TextEditingController(text: unitsPerFloor == 0 ? '' : '$unitsPerFloor'),
-      floorUnits = floorUnits ?? <int>[];
+      flats = flats ?? <String>[];
 
-  factory _TowerRow.fromConfig(TowerConfig t) {
-    final units = [for (final f in t.floors) f.units];
-    final uniform = units.isNotEmpty && units.every((u) => u == units.first);
-    return _TowerRow(
-      name: t.name,
-      code: t.code,
-      floors: t.floors.length,
-      unitsPerFloor: uniform ? units.first : 0,
-      floorUnits: units,
-    )..customised = !uniform;
-  }
+  factory _TowerRow.fromConfig(TowerConfig t) => _TowerRow(name: t.name, flats: [...t.flatNames]);
 
   final TextEditingController name;
-  final TextEditingController code;
-  final TextEditingController floorCount;
-  final TextEditingController unitsPerFloor;
 
-  /// Units on floor 1, 2, 3 ... (index 0 is floor 1).
-  final List<int> floorUnits;
+  /// What is being typed into "Add flats" before it is added.
+  final TextEditingController flatInput = TextEditingController();
+
+  /// The flat names of this tower, in the order they were added.
+  final List<String> flats;
+
+  /// Whether every flat chip is shown (long towers collapse to the first few).
   bool expanded = false;
-  bool customised = false;
 
   void dispose() {
     name.dispose();
-    code.dispose();
-    floorCount.dispose();
-    unitsPerFloor.dispose();
+    flatInput.dispose();
   }
 
-  int get floors => int.tryParse(floorCount.text.trim()) ?? 0;
-  int get defaultUnits => int.tryParse(unitsPerFloor.text.trim()) ?? 0;
-  int get totalUnits => floorUnits.fold(0, (a, b) => a + b);
+  int get totalUnits => flats.length;
 
-  /// Floor count changed: keep what was entered for existing floors, fill new ones with the default.
-  void resizeFloors() {
-    final n = floors.clamp(0, 200);
-    while (floorUnits.length > n) {
-      floorUnits.removeLast();
+  static const maxFlatLength = 30;
+  static const maxFlatsPerTower = 2000;
+
+  /// `101-110` / `A-101 to A-110` / `B1-B4`: a prefix (optional) and a number range.
+  static final _range = RegExp(r'^(\D*?)(\d+)\s*(?:-|–|to)\s*(\D*?)(\d+)$', caseSensitive: false);
+
+  /// Splits what was typed into flat names. Commas and new lines separate
+  /// names; a range like `101-110` or `A-101 to A-110` expands to every flat in it.
+  static List<String> parse(String raw) {
+    final out = <String>[];
+    for (final part in raw.split(RegExp(r'[,\n;]'))) {
+      final p = part.trim();
+      if (p.isEmpty) continue;
+      final m = _range.firstMatch(p);
+      if (m != null) {
+        final prefix = m.group(1)!;
+        final endPrefix = m.group(3)!;
+        final from = int.parse(m.group(2)!);
+        final to = int.parse(m.group(4)!);
+        final samePrefix = endPrefix.isEmpty || endPrefix.toLowerCase() == prefix.toLowerCase();
+        if (samePrefix && to > from && to - from < 500) {
+          final width = m.group(2)!.startsWith('0') ? m.group(2)!.length : 0;
+          for (var n = from; n <= to; n++) {
+            out.add('$prefix${n.toString().padLeft(width, '0')}');
+          }
+          continue;
+        }
+      }
+      out.add(p);
     }
-    while (floorUnits.length < n) {
-      floorUnits.add(defaultUnits);
+    return out;
+  }
+
+  /// Adds the typed names, skipping ones this tower already has. Returns how many were added.
+  int addTyped() {
+    final have = {for (final f in flats) f.toLowerCase()};
+    var added = 0;
+    for (final f in parse(flatInput.text)) {
+      if (flats.length >= maxFlatsPerTower) break;
+      if (have.add(f.toLowerCase())) {
+        flats.add(f);
+        added++;
+      }
     }
+    flatInput.clear();
+    return added;
   }
-
-  /// "Units per floor" changed: apply to every floor.
-  void applyDefaultUnits() {
-    final n = floors.clamp(0, 200);
-    floorUnits
-      ..clear()
-      ..addAll(List<int>.filled(n, defaultUnits));
-    customised = false;
-  }
-
-  static final _code = RegExp(r'^[A-Za-z0-9]{1,6}$');
 
   String? get problem {
     if (name.text.trim().isEmpty) return 'Enter a tower name';
-    if (!_code.hasMatch(code.text.trim())) return 'Enter a tower code (1–6 letters or digits)';
-    if (floors < 1 || floors > 200) return 'Enter the number of floors';
-    if (floorUnits.length != floors) return 'Set the units per floor';
-    if (floorUnits.any((u) => u < 1 || u > 50)) return 'Every floor needs 1–50 units';
+    if (flats.isEmpty) return 'Add the flats in this tower';
+    for (final f in flats) {
+      if (f.length > maxFlatLength) return 'Flat name "$f" is too long (max $maxFlatLength characters)';
+    }
     return null;
   }
 
-  TowerConfig toConfig() => TowerConfig(
-    name: name.text.trim(),
-    code: code.text.trim().toUpperCase(),
-    floors: [for (var i = 0; i < floorUnits.length; i++) FloorConfig(number: i + 1, units: floorUnits[i])],
-  );
+  TowerConfig toConfig() => TowerConfig(name: name.text.trim(), flats: List<String>.unmodifiable(flats));
 }
 
 class PropertyLayoutEditorState extends State<PropertyLayoutEditor> {
@@ -123,10 +130,13 @@ class PropertyLayoutEditorState extends State<PropertyLayoutEditor> {
   final _towerCount = TextEditingController();
   final List<_TowerRow> _towers = [];
   final _houses = TextEditingController();
-  final _prefix = TextEditingController(text: 'H-');
-  final _start = TextEditingController(text: '1');
+
+  /// One name field per house / villa, generated from the house count.
+  final List<TextEditingController> _houseNames = [];
 
   static const _maxTowers = 100;
+  static const _maxHouses = 1000;
+  static const _maxHouseName = 30;
 
   @override
   void initState() {
@@ -137,16 +147,17 @@ class PropertyLayoutEditorState extends State<PropertyLayoutEditor> {
     }
     if (_towers.isNotEmpty) _towerCount.text = '${_towers.length}';
     final sf = widget.initialSingleFamily;
-    if (sf != null) {
-      _houses.text = '${sf.totalHouses}';
-      _prefix.text = sf.labelPrefix;
-      _start.text = '${sf.startNumber}';
+    if (sf != null && sf.totalHouses > 0) {
+      for (final name in sf.houseNames) {
+        _houseNames.add(TextEditingController(text: name));
+      }
+      _houses.text = '${_houseNames.length}';
     }
   }
 
   @override
   void dispose() {
-    for (final c in [_towerCount, _houses, _prefix, _start]) {
+    for (final c in [_towerCount, _houses, ..._houseNames]) {
       c.dispose();
     }
     for (final t in _towers) {
@@ -166,47 +177,57 @@ class PropertyLayoutEditorState extends State<PropertyLayoutEditor> {
   ];
 
   SingleFamilyConfig? get singleFamily {
-    final n = int.tryParse(_houses.text.trim());
-    if (n == null || n < 1) return null;
-    return SingleFamilyConfig(
-      totalHouses: n,
-      labelPrefix: _prefix.text.trim().isEmpty ? 'H-' : _prefix.text.trim(),
-      startNumber: int.tryParse(_start.text.trim()) ?? 1,
-    );
+    if (_houseNames.isEmpty) return null;
+    return SingleFamilyConfig(houses: [for (final c in _houseNames) c.text.trim()]);
   }
 
   int get towerCount => _towers.length;
   int get configuredTowers => _towers.where((t) => t.problem == null).length;
   int get totalUnits => _type == PropertyKind.singleFamily
-      ? (singleFamily?.totalHouses ?? 0)
+      ? _houseNames.where((c) => c.text.trim().isNotEmpty).length
       : _towers.where((t) => t.problem == null).fold(0, (a, t) => a + t.totalUnits);
 
   /// First thing still missing, or null when the layout is complete.
   String? validate() {
     if (_type == null) return 'Choose a property type: Multifamily or Single family.';
     if (_type == PropertyKind.singleFamily) {
-      final n = int.tryParse(_houses.text.trim());
-      if (n == null || n < 1) return 'Enter the number of houses.';
-      if (n > 20000) return 'A society can have at most 20,000 houses.';
-      final s = int.tryParse(_start.text.trim());
-      if (s == null || s < 1) return 'Enter a valid starting house number.';
-      if (_prefix.text.trim().length > 8) return 'The house label prefix is too long.';
+      if (_houseNames.isEmpty) return 'Enter the number of houses / villas.';
+      // House names identify a home across the society, so each must be filled in and unique.
+      final seen = <String>{};
+      for (var i = 0; i < _houseNames.length; i++) {
+        final name = _houseNames[i].text.trim();
+        if (name.isEmpty) return 'Enter a name for house ${i + 1}.';
+        if (name.length > _maxHouseName) return 'House ${i + 1}: the name is too long (max $_maxHouseName characters).';
+        if (!seen.add(name.toLowerCase())) return 'House ${i + 1}: the name "$name" is already used.';
+      }
       return null;
     }
     if (_towers.isEmpty) return 'Enter the number of towers.';
     final names = <String>{};
-    final codes = <String>{};
+    // Flat names must be unique across the whole society, since that is how residents and guards identify a flat.
+    final flatOwner = <String, int>{};
     var units = 0;
     for (var i = 0; i < _towers.length; i++) {
       final t = _towers[i];
       final p = t.problem;
       if (p != null) return 'Tower ${i + 1}: $p.';
       if (!names.add(t.name.text.trim().toLowerCase())) return 'Tower ${i + 1}: the name "${t.name.text.trim()}" is already used.';
-      if (!codes.add(t.code.text.trim().toUpperCase())) return 'Tower ${i + 1}: the code "${t.code.text.trim().toUpperCase()}" is already used.';
+      for (final f in t.flats) {
+        final other = flatOwner[f.toLowerCase()];
+        if (other != null && other != i) {
+          return 'Flat "$f" is in both ${_towerLabel(other)} and ${_towerLabel(i)}. Flat names must be unique, e.g. A-101 and B-101.';
+        }
+        flatOwner[f.toLowerCase()] = i;
+      }
       units += t.totalUnits;
     }
     if (units > 20000) return 'A society can have at most 20,000 units.';
     return null;
+  }
+
+  String _towerLabel(int i) {
+    final n = _towers[i].name.text.trim();
+    return n.isEmpty ? 'Tower ${i + 1}' : n;
   }
 
   bool get isComplete => validate() == null;
@@ -237,28 +258,37 @@ class PropertyLayoutEditorState extends State<PropertyLayoutEditor> {
 
   static String _letter(int i) => i < 26 ? String.fromCharCode(65 + i) : 'T${i + 1}';
 
-  /// Convenience: fills blank names / codes with Tower A, B, C ... The admin can still edit them.
+  /// Convenience: fills blank names with Tower A, B, C ... The admin can still edit them.
   void _autoName() => _changed(() {
     for (var i = 0; i < _towers.length; i++) {
       final t = _towers[i];
       if (t.name.text.trim().isEmpty) t.name.text = 'Tower ${_letter(i)}';
-      if (t.code.text.trim().isEmpty) t.code.text = _letter(i);
     }
   });
 
-  /// Copies the first tower's floors and units to every tower that has none yet.
-  void _copyFirst() => _changed(() {
-    final first = _towers.first;
-    for (final t in _towers.skip(1)) {
-      if (t.floors != 0) continue;
-      t.floorCount.text = first.floorCount.text;
-      t.unitsPerFloor.text = first.unitsPerFloor.text;
-      t.floorUnits
-        ..clear()
-        ..addAll(first.floorUnits);
-      t.customised = first.customised;
+  void _setHouseCount(String raw) {
+    final n = (int.tryParse(raw.trim()) ?? 0).clamp(0, _maxHouses);
+    _changed(() {
+      while (_houseNames.length > n) {
+        _houseNames.removeLast().dispose();
+      }
+      while (_houseNames.length < n) {
+        _houseNames.add(TextEditingController());
+      }
+    });
+  }
+
+  /// Convenience: fills blank house names with Villa 1, Villa 2 ... The admin can still edit them.
+  void _suggestHouseNames() => _changed(() {
+    for (var i = 0; i < _houseNames.length; i++) {
+      if (_houseNames[i].text.trim().isEmpty) _houseNames[i].text = 'Villa ${i + 1}';
     }
   });
+
+  void _addFlats(_TowerRow t) {
+    if (t.flatInput.text.trim().isEmpty) return;
+    _changed(t.addTyped);
+  }
 
   // ------------------------------------------------------------------ UI
 
@@ -304,16 +334,16 @@ class PropertyLayoutEditorState extends State<PropertyLayoutEditor> {
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              _typeTile(PropertyKind.multifamily, 'Multifamily', 'Towers with floors and units', Icons2.tower),
+              _typeTile(PropertyKind.multifamily, 'Multifamily', 'Towers and their flats', Icons2.tower),
               const SizedBox(width: Tokens.space3),
-              _typeTile(PropertyKind.singleFamily, 'Single family', 'Individual houses', Icons2.family),
+              _typeTile(PropertyKind.singleFamily, 'Single family', 'Named houses / villas', Icons2.family),
             ],
           ),
         ),
         if (widget.lockType)
           Padding(
             padding: const EdgeInsets.only(top: Tokens.space2),
-            child: Text('The property type cannot change once units exist. You can add towers, floors and units.', style: _muted),
+            child: Text('The property type cannot change once units exist. You can add towers and flats.', style: _muted),
           ),
         const SizedBox(height: Tokens.space5),
         if (_type == PropertyKind.multifamily) ..._multifamily(),
@@ -353,7 +383,7 @@ class PropertyLayoutEditorState extends State<PropertyLayoutEditor> {
                       style: TextStyle(fontFamily: Tokens.fontFamily, fontWeight: FontWeight.w600, color: done == total ? Tokens.positive : Tokens.ink),
                     ),
                   ),
-                  Text('$totalUnits units', style: _muted),
+                  Text('$totalUnits flats', style: _muted),
                 ],
               ),
               const SizedBox(height: Tokens.space2),
@@ -373,7 +403,6 @@ class PropertyLayoutEditorState extends State<PropertyLayoutEditor> {
                 spacing: Tokens.space2,
                 children: [
                   ActionChip(label: const Text('Suggest names'), onPressed: _autoName),
-                  if (total > 1) ActionChip(label: const Text('Copy tower 1 layout to empty towers'), onPressed: _copyFirst),
                 ],
               ),
             ],
@@ -412,69 +441,90 @@ class PropertyLayoutEditorState extends State<PropertyLayoutEditor> {
               ],
             ),
             const SizedBox(height: Tokens.space3),
+            // 1. Tower name
+            TextField(
+              controller: t.name,
+              textCapitalization: TextCapitalization.words,
+              decoration: InputDecoration(labelText: 'Tower name', hintText: 'Tower $letter'),
+              onChanged: (_) => _changed(() {}),
+            ),
+            const SizedBox(height: Tokens.space3),
+            // 2. Flat names
             Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Expanded(
-                  flex: 3,
                   child: TextField(
-                    controller: t.name,
-                    textCapitalization: TextCapitalization.words,
-                    decoration: InputDecoration(labelText: 'Tower name', hintText: 'Tower $letter'),
-                    onChanged: (_) => _changed(() {}),
+                    controller: t.flatInput,
+                    textCapitalization: TextCapitalization.characters,
+                    textInputAction: TextInputAction.done,
+                    decoration: InputDecoration(
+                      labelText: 'Add flat names',
+                      hintText: '$letter-101, $letter-102',
+                      helperText: 'Separate with commas. A range like $letter-101 to $letter-110 adds every flat in it.',
+                      helperMaxLines: 2,
+                    ),
+                    onSubmitted: (_) => _addFlats(t),
                   ),
                 ),
-                const SizedBox(width: Tokens.space3),
-                Expanded(
-                  flex: 2,
-                  child: TextField(
-                    controller: t.code,
-                    textCapitalization: TextCapitalization.characters,
-                    maxLength: 6,
-                    decoration: InputDecoration(labelText: 'Code', hintText: letter, counterText: ''),
-                    onChanged: (_) => _changed(() {}),
+                const SizedBox(width: Tokens.space2),
+                Padding(
+                  padding: const EdgeInsets.only(top: Tokens.space1),
+                  child: IconButton.filledTonal(
+                    tooltip: 'Add flats',
+                    icon: const AppIcon(Icons2.add, size: IconSize.row),
+                    onPressed: () => _addFlats(t),
                   ),
                 ),
               ],
             ),
             const SizedBox(height: Tokens.space3),
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Expanded(
-                  child: TextField(
-                    controller: t.floorCount,
-                    keyboardType: TextInputType.number,
-                    decoration: const InputDecoration(labelText: 'Number of floors'),
-                    onChanged: (_) => _changed(t.resizeFloors),
+            if (t.flats.isEmpty)
+              Text('No flats added yet.', style: _muted)
+            else ...[
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      '${t.flats.length} ${t.flats.length == 1 ? 'flat' : 'flats'}',
+                      style: TextStyle(fontFamily: Tokens.fontFamily, fontSize: Tokens.typeSm, fontWeight: FontWeight.w600, color: Tokens.ink),
+                    ),
                   ),
-                ),
-                const SizedBox(width: Tokens.space3),
-                Expanded(
-                  child: TextField(
-                    controller: t.unitsPerFloor,
-                    keyboardType: TextInputType.number,
-                    decoration: const InputDecoration(labelText: 'Units per floor'),
-                    onChanged: (_) => _changed(t.applyDefaultUnits),
+                  if (t.expanded && t.flats.length > _collapsedFlats)
+                    TextButton(
+                      onPressed: () => setState(() => t.expanded = false),
+                      child: const Text('Show less'),
+                    ),
+                  TextButton(
+                    onPressed: () async {
+                      final clear = await _confirmClear(context, t);
+                      if (clear) _changed(t.flats.clear);
+                    },
+                    child: const Text('Clear'),
                   ),
-                ),
-              ],
-            ),
-            if (t.floorUnits.isNotEmpty) ...[
-              const SizedBox(height: Tokens.space3),
-              _preview(t),
-              const SizedBox(height: Tokens.space1),
-              Align(
-                alignment: Alignment.centerLeft,
-                child: TextButton.icon(
-                  onPressed: () => setState(() => t.expanded = !t.expanded),
-                  icon: AppIcon(t.expanded ? Icons2.collapse : Icons2.expand, size: IconSize.inline),
-                  label: Text(t.expanded ? 'Hide floors' : 'Customise units for each floor'),
-                ),
+                ],
               ),
-              if (t.expanded) _floorList(t),
+              const SizedBox(height: Tokens.space1),
+              Wrap(
+                spacing: Tokens.space2,
+                runSpacing: Tokens.space2,
+                children: [
+                  for (final f in (t.expanded ? t.flats : t.flats.take(_collapsedFlats)))
+                    InputChip(
+                      label: Text(f),
+                      visualDensity: VisualDensity.compact,
+                      onDeleted: () => _changed(() => t.flats.remove(f)),
+                    ),
+                  if (!t.expanded && t.flats.length > _collapsedFlats)
+                    ActionChip(
+                      label: Text('+${t.flats.length - _collapsedFlats} more'),
+                      visualDensity: VisualDensity.compact,
+                      onPressed: () => setState(() => t.expanded = true),
+                    ),
+                ],
+              ),
             ],
-            if (!ok && (t.name.text.isNotEmpty || t.code.text.isNotEmpty || t.floorCount.text.isNotEmpty))
+            if (!ok && (t.name.text.isNotEmpty || t.flats.isNotEmpty))
               Padding(
                 padding: const EdgeInsets.only(top: Tokens.space2),
                 child: Text(problem ?? '', style: TextStyle(fontFamily: Tokens.fontFamily, fontSize: Tokens.typeXs, color: Tokens.warning)),
@@ -485,109 +535,76 @@ class PropertyLayoutEditorState extends State<PropertyLayoutEditor> {
     );
   }
 
-  /// The generated nomenclature, so the Super Admin sees exactly what will be created.
-  Widget _preview(_TowerRow t) {
-    final code = t.code.text.trim().isEmpty ? '?' : t.code.text.trim().toUpperCase();
-    final first = t.floorUnits.first;
-    if (t.totalUnits == 0) return Text('${t.floorUnits.length} floors · set the units per floor', style: _muted);
-    final sample = [for (var u = 1; u <= first && u <= 4; u++) TowerConfig.unitLabel(code, 1, u)].join(', ');
-    return Text(
-      '${t.floorUnits.length} floors · ${t.totalUnits} units\nFloor 1: $sample${first > 4 ? ' …' : ''}',
-      style: _muted,
-    );
-  }
+  /// How many flat chips a tower shows before "+N more".
+  static const _collapsedFlats = 24;
 
-  Widget _floorList(_TowerRow t) {
-    final code = t.code.text.trim().isEmpty ? '?' : t.code.text.trim().toUpperCase();
-    return Column(
-      children: [
-        for (var f = 0; f < t.floorUnits.length; f++)
-          Padding(
-            padding: const EdgeInsets.symmetric(vertical: Tokens.space1),
-            child: Row(
-              children: [
-                SizedBox(width: 64, child: Text('Floor ${f + 1}', style: TextStyle(fontFamily: Tokens.fontFamily, color: Tokens.ink))),
-                Expanded(
-                  child: Text(
-                    t.floorUnits[f] <= 0
-                        ? '—'
-                        : t.floorUnits[f] <= 3
-                        ? [for (var u = 1; u <= t.floorUnits[f]; u++) TowerConfig.unitLabel(code, f + 1, u)].join(', ')
-                        : '${TowerConfig.unitLabel(code, f + 1, 1)} … ${TowerConfig.unitLabel(code, f + 1, t.floorUnits[f])}',
-                    style: _muted,
-                  ),
-                ),
-                IconButton(
-                  visualDensity: VisualDensity.compact,
-                  tooltip: 'Fewer units',
-                  icon: const Icon(Icons.remove_circle_outline),
-                  onPressed: t.floorUnits[f] <= 1 ? null : () => _changed(() {
-                    t.floorUnits[f]--;
-                    t.customised = true;
-                  }),
-                ),
-                SizedBox(width: 28, child: Text('${t.floorUnits[f]}', textAlign: TextAlign.center, style: TextStyle(fontFamily: Tokens.fontFamily, fontWeight: FontWeight.w600, color: Tokens.ink))),
-                IconButton(
-                  visualDensity: VisualDensity.compact,
-                  tooltip: 'More units',
-                  icon: const Icon(Icons.add_circle_outline),
-                  onPressed: t.floorUnits[f] >= 50 ? null : () => _changed(() {
-                    t.floorUnits[f]++;
-                    t.customised = true;
-                  }),
-                ),
-              ],
-            ),
-          ),
-      ],
+  Future<bool> _confirmClear(BuildContext context, _TowerRow t) async {
+    final label = t.name.text.trim().isEmpty ? 'this tower' : t.name.text.trim();
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: Tokens.surface,
+        title: const Text('Remove all flats?'),
+        content: Text('This removes all ${t.flats.length} flats from $label.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.of(ctx).pop(false), child: const Text('Cancel')),
+          FilledButton(onPressed: () => Navigator.of(ctx).pop(true), child: const Text('Remove')),
+        ],
+      ),
     );
+    return ok == true;
   }
 
   // ---------------------------------------------------- single family UI
 
   List<Widget> _single() {
-    final sf = singleFamily;
+    final total = _houseNames.length;
+    final named = _houseNames.where((c) => c.text.trim().isNotEmpty).length;
     return [
-      const SectionLabel('Houses'),
+      const SectionLabel('Houses / villas'),
       const SizedBox(height: Tokens.space2),
       TextField(
         controller: _houses,
         keyboardType: TextInputType.number,
-        decoration: const InputDecoration(labelText: 'Number of houses'),
-        onChanged: (_) => _changed(() {}),
+        decoration: InputDecoration(
+          labelText: 'Number of houses / villas',
+          helperText: 'Enter a number and a name field appears for each one (up to $_maxHouses).',
+        ),
+        onChanged: _setHouseCount,
       ),
-      const SizedBox(height: Tokens.space3),
-      Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Expanded(
-            child: TextField(
-              controller: _prefix,
-              textCapitalization: TextCapitalization.characters,
-              maxLength: 8,
-              decoration: const InputDecoration(labelText: 'House label prefix', helperText: 'e.g. H- or V-', counterText: ''),
-              onChanged: (_) => _changed(() {}),
-            ),
-          ),
-          const SizedBox(width: Tokens.space3),
-          Expanded(
-            child: TextField(
-              controller: _start,
-              keyboardType: TextInputType.number,
-              decoration: const InputDecoration(labelText: 'Starting number'),
-              onChanged: (_) => _changed(() {}),
-            ),
-          ),
-        ],
-      ),
-      if (sf != null) ...[
-        const SizedBox(height: Tokens.space3),
+      if (total > 0) ...[
+        const SizedBox(height: Tokens.space4),
         Panel(
-          child: Text(
-            '${sf.totalHouses} houses: ${sf.labelAt(0)}${sf.totalHouses > 1 ? ', ${sf.labelAt(1)}' : ''}${sf.totalHouses > 2 ? ' … ${sf.labelAt(sf.totalHouses - 1)}' : ''}',
-            style: _muted,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                '$named of $total named',
+                style: TextStyle(fontFamily: Tokens.fontFamily, fontWeight: FontWeight.w600, color: named == total ? Tokens.positive : Tokens.ink),
+              ),
+              const SizedBox(height: Tokens.space2),
+              Text('Every house / villa needs a name before the society can be saved.', style: _muted),
+              const SizedBox(height: Tokens.space2),
+              ActionChip(label: const Text('Suggest names'), onPressed: _suggestHouseNames),
+            ],
           ),
         ),
+        const SizedBox(height: Tokens.space3),
+        for (var i = 0; i < total; i++)
+          Padding(
+            padding: const EdgeInsets.only(bottom: Tokens.space3),
+            child: TextField(
+              controller: _houseNames[i],
+              textCapitalization: TextCapitalization.words,
+              maxLength: _maxHouseName,
+              decoration: InputDecoration(
+                labelText: 'House / villa ${i + 1} name',
+                hintText: 'Villa ${i + 1}',
+                counterText: '',
+              ),
+              onChanged: (_) => _changed(() {}),
+            ),
+          ),
       ],
     ];
   }

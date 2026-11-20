@@ -13,15 +13,13 @@ import '../widgets/future_body.dart';
 import 'super_society_create_screen.dart';
 import 'super_society_detail_screen.dart';
 
-Tone societyTone(String raw) => switch (raw) {
-  'ACTIVE' => Tone.positive,
-  'PENDING' => Tone.warning,
-  'REJECTED' => Tone.danger,
-  'INACTIVE' || 'SUSPENDED' => Tone.neutral,
-  _ => Tone.info,
-};
+/// A society is either Active or Inactive. Anything that is not ACTIVE (including
+/// records left over from the old registration workflow) is shown as Inactive.
+String societyStatusLabel(String raw) => raw == 'ACTIVE' ? 'Active' : 'Inactive';
 
-/// Every society on the platform, filterable by lifecycle status.
+Tone societyTone(String raw) => raw == 'ACTIVE' ? Tone.positive : Tone.neutral;
+
+/// Every society on the platform, filterable by All / Active / Inactive.
 class SuperSocietiesTab extends StatefulWidget {
   const SuperSocietiesTab({super.key});
 
@@ -31,14 +29,12 @@ class SuperSocietiesTab extends StatefulWidget {
 
 class _SuperSocietiesTabState extends State<SuperSocietiesTab> {
   static const _filters = <(String, String)>[
-    ('PENDING', 'Pending'),
+    ('', 'All'),
     ('ACTIVE', 'Active'),
     ('INACTIVE', 'Inactive'),
-    ('REJECTED', 'Rejected'),
-    ('', 'All'),
   ];
 
-  String _status = 'PENDING';
+  String _status = '';
   String _search = '';
   int _revision = 0;
   Timer? _debounce;
@@ -53,7 +49,7 @@ class _SuperSocietiesTabState extends State<SuperSocietiesTab> {
   Widget build(BuildContext context) {
     return AppScaffold(
       title: 'Societies',
-      subtitle: 'Onboard, verify and manage',
+      subtitle: 'Onboard and manage',
       showBack: false,
       fillBody: true,
       floatingAction: FloatingActionButton.extended(
@@ -99,10 +95,8 @@ class _SuperSocietiesTabState extends State<SuperSocietiesTab> {
         key: ValueKey('$_status|$_search|$_revision'),
         refreshOn: const ['society:updated'],
         emptyIcon: Icons2.societies,
-        emptyTitle: _status == 'PENDING' ? 'No societies waiting' : 'No societies found',
-        emptyMessage: _status == 'PENDING'
-            ? 'New registrations appear here for verification.'
-            : 'Try another filter, or onboard a new society.',
+        emptyTitle: 'No societies found',
+        emptyMessage: 'Try another filter, or onboard a new society.',
         padding: const EdgeInsets.only(bottom: 96),
         fetch: (page) => AppServices.instance.superAdmin.societies(
           page: page,
@@ -140,7 +134,7 @@ class _SuperSocietiesTabState extends State<SuperSocietiesTab> {
                 ),
               ),
               const SizedBox(width: Tokens.space3),
-              StatusBadge(label: s.status, tone: societyTone(s.rawStatus)),
+              StatusBadge(label: societyStatusLabel(s.rawStatus), tone: societyTone(s.rawStatus)),
             ],
           ),
         ),

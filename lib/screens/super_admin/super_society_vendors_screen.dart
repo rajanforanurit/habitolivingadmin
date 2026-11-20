@@ -10,25 +10,38 @@ import 'package:habitoliving_shared/ui/widgets/app_scaffold.dart';
 import 'package:habitoliving_shared/ui/widgets/primitives.dart';
 import 'package:habitoliving_shared/ui/widgets/states.dart';
 import 'package:habitoliving_shared/ui/widgets/status.dart';
+import '../widgets/future_body.dart';
+import '../widgets/validators.dart';
 
-/// Vendors: the outside companies the society hires.
+/// Vendors of one society: the outside companies it hires.
+///
+/// Super Admin only. Society admins can no longer add or change vendors; the
+/// platform team does it here.
 ///
 /// Distinct from staff, who are employed directly. A vendor is the agency —
 /// security contractor, lift AMC, waste removal — and the person to call when
 /// the lift is stuck at 11 PM.
-class VendorsScreen extends StatefulWidget {
-  const VendorsScreen({super.key});
+class SuperSocietyVendorsScreen extends StatefulWidget {
+  const SuperSocietyVendorsScreen({
+    super.key,
+    required this.societyId,
+    required this.societyName,
+  });
+
+  final String societyId;
+  final String societyName;
 
   @override
-  State<VendorsScreen> createState() => _VendorsScreenState();
+  State<SuperSocietyVendorsScreen> createState() =>
+      _SuperSocietyVendorsScreenState();
 }
 
-class _VendorsScreenState extends State<VendorsScreen> {
+class _SuperSocietyVendorsScreenState extends State<SuperSocietyVendorsScreen> {
   int _revision = 0;
   late Future<PageResult<Vendor>> _vendors = _load();
 
   Future<PageResult<Vendor>> _load() =>
-      AppServices.instance.admin.vendors(limit: 50);
+      AppServices.instance.superAdmin.societyVendors(widget.societyId, limit: 50);
 
   void _reload() => setState(() {
     _vendors = _load();
@@ -39,11 +52,13 @@ class _VendorsScreenState extends State<VendorsScreen> {
   Widget build(BuildContext context) {
     return AppScaffold(
       title: 'Vendors',
-      subtitle: 'Outside companies on contract',
+      subtitle: widget.societyName,
       floatingAction: FloatingActionButton(
         onPressed: () async {
           final ok = await Navigator.of(context).push<bool>(
-            MaterialPageRoute(builder: (_) => const VendorEditScreen()),
+            MaterialPageRoute(
+              builder: (_) => SuperVendorEditScreen(societyId: widget.societyId),
+            ),
           );
           if (ok == true) _reload();
         },
@@ -88,7 +103,10 @@ class _VendorsScreenState extends State<VendorsScreen> {
                       onTap: () async {
                         final ok = await Navigator.of(context).push<bool>(
                           MaterialPageRoute(
-                            builder: (_) => VendorEditScreen(vendor: items[i]),
+                            builder: (_) => SuperVendorEditScreen(
+                              societyId: widget.societyId,
+                              vendor: items[i],
+                            ),
                           ),
                         );
                         if (ok == true) _reload();
@@ -185,16 +203,18 @@ class _Card extends StatelessWidget {
   }
 }
 
-class VendorEditScreen extends StatefulWidget {
-  const VendorEditScreen({super.key, this.vendor});
+/// Adds or edits a vendor of one society (Super Admin only).
+class SuperVendorEditScreen extends StatefulWidget {
+  const SuperVendorEditScreen({super.key, required this.societyId, this.vendor});
 
+  final String societyId;
   final Vendor? vendor;
 
   @override
-  State<VendorEditScreen> createState() => _VendorEditScreenState();
+  State<SuperVendorEditScreen> createState() => _SuperVendorEditScreenState();
 }
 
-class _VendorEditScreenState extends State<VendorEditScreen> {
+class _SuperVendorEditScreenState extends State<SuperVendorEditScreen> {
   final _form = GlobalKey<FormState>();
   late final TextEditingController _name;
   late final TextEditingController _contact;
@@ -246,24 +266,26 @@ class _VendorEditScreenState extends State<VendorEditScreen> {
       _error = null;
     });
     try {
-      final admin = AppServices.instance.admin;
+      final api = AppServices.instance.superAdmin;
       if (widget.vendor == null) {
-        await admin.createVendor(
+        await api.createSocietyVendor(
+          widget.societyId,
           name: _name.text.trim(),
           category: _category,
+          mobile: _phone.text.trim(),
           contactName: _contact.text.trim().isEmpty
               ? null
               : _contact.text.trim(),
-          phone: _phone.text.trim().isEmpty ? null : _phone.text.trim(),
           email: _email.text.trim().isEmpty ? null : _email.text.trim(),
         );
       } else {
-        await admin.updateVendor(widget.vendor!.id, {
+        await api.updateSocietyVendor(widget.societyId, widget.vendor!.id, {
           'name': _name.text.trim(),
           'category': _category,
-          'contactName': _contact.text.trim(),
-          'phone': _phone.text.trim(),
-          'email': _email.text.trim(),
+          'mobile': _phone.text.trim(),
+          if (_contact.text.trim().isNotEmpty)
+            'contactPerson': _contact.text.trim(),
+          if (_email.text.trim().isNotEmpty) 'email': _email.text.trim(),
         });
       }
       if (!mounted) return;
@@ -272,7 +294,7 @@ class _VendorEditScreenState extends State<VendorEditScreen> {
       if (!mounted) return;
       setState(() {
         _busy = false;
-        _error = '$e';
+        _error = friendlyError(e);
       });
     }
   }
@@ -317,8 +339,9 @@ class _VendorEditScreenState extends State<VendorEditScreen> {
               child: TextFormField(
                 controller: _phone,
                 keyboardType: TextInputType.phone,
+                validator: Validators.mobile,
                 decoration: const InputDecoration(
-                  labelText: 'Phone (optional)',
+                  labelText: 'Mobile number',
                 ),
               ),
             ),

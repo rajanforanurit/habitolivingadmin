@@ -9,24 +9,40 @@ import 'package:habitoliving_shared/ui/widgets/app_scaffold.dart';
 import 'package:habitoliving_shared/ui/widgets/primitives.dart';
 import 'package:habitoliving_shared/ui/widgets/states.dart';
 import 'package:habitoliving_shared/ui/widgets/status.dart';
+import '../widgets/future_body.dart';
 
-/// Administrators of this society: who else can do what you can.
+/// Administrators of one society: the people who can run it.
+///
+/// Super Admin only. Society admins can no longer add or manage other
+/// administrators; the platform team does it here.
 ///
 /// Creating an admin sends them an account (mobile + temporary password) that
 /// they must rotate at first sign-in. Deactivating revokes their sessions
 /// immediately; it does not delete their history.
-class AdministratorsScreen extends StatefulWidget {
-  const AdministratorsScreen({super.key});
+class SuperSocietyAdministratorsScreen extends StatefulWidget {
+  const SuperSocietyAdministratorsScreen({
+    super.key,
+    required this.societyId,
+    required this.societyName,
+  });
+
+  final String societyId;
+  final String societyName;
 
   @override
-  State<AdministratorsScreen> createState() => _AdministratorsScreenState();
+  State<SuperSocietyAdministratorsScreen> createState() =>
+      _SuperSocietyAdministratorsScreenState();
 }
 
-class _AdministratorsScreenState extends State<AdministratorsScreen> {
+class _SuperSocietyAdministratorsScreenState
+    extends State<SuperSocietyAdministratorsScreen> {
   int _revision = 0;
   late Future<List<AdminUser>> _admins = _load();
 
-  Future<List<AdminUser>> _load() => AppServices.instance.admin.admins();
+  Future<List<AdminUser>> _load() => AppServices.instance.superAdmin.admins(
+    societyId: widget.societyId,
+    limit: 100,
+  );
 
   void _reload() => setState(() {
     _admins = _load();
@@ -37,11 +53,16 @@ class _AdministratorsScreenState extends State<AdministratorsScreen> {
   Widget build(BuildContext context) {
     return AppScaffold(
       title: 'Administrators',
-      subtitle: 'Who else can run the society',
+      subtitle: widget.societyName,
       floatingAction: FloatingActionButton(
         onPressed: () async {
           final created = await Navigator.of(context).push<bool>(
-            MaterialPageRoute(builder: (_) => const AdminCreateScreen()),
+            MaterialPageRoute(
+              builder: (_) => SuperAdminCreateScreen(
+                societyId: widget.societyId,
+                societyName: widget.societyName,
+              ),
+            ),
           );
           if (created == true) _reload();
         },
@@ -65,7 +86,7 @@ class _AdministratorsScreenState extends State<AdministratorsScreen> {
               icon: Icons2.administrators,
               title: 'No administrators yet',
               message:
-                  'Add the people who share this workload — the treasurer, the '
+                  'Add the people who run this society — the treasurer, the '
                   'facility manager, the security lead.',
             );
           }
@@ -164,7 +185,9 @@ class _Card extends StatelessWidget {
                 onSelected: (value) async {
                   switch (value) {
                     case 'deactivate':
-                      await _deactivate(context, inactive);
+                      await _deactivate(context);
+                    case 'reactivate':
+                      await _reactivate(context);
                     case 'reset':
                       await _reset(context);
                   }
@@ -175,12 +198,16 @@ class _Card extends StatelessWidget {
                     value: 'reset',
                     child: Text('Reset access'),
                   ),
-                  PopupMenuItem(
-                    value: 'deactivate',
-                    child: Text(
-                      inactive ? 'Reactivate not available' : 'Deactivate',
+                  if (inactive)
+                    const PopupMenuItem(
+                      value: 'reactivate',
+                      child: Text('Reactivate'),
+                    )
+                  else
+                    const PopupMenuItem(
+                      value: 'deactivate',
+                      child: Text('Deactivate'),
                     ),
-                  ),
                 ],
               ),
             ],
@@ -190,29 +217,33 @@ class _Card extends StatelessWidget {
     );
   }
 
-  Future<void> _deactivate(BuildContext context, bool alreadyInactive) async {
-    if (alreadyInactive) {
-      showMessage(
-        context,
-        'This admin is already inactive. Contact the platform team to restore.',
-      );
-      return;
+  Future<void> _reactivate(BuildContext context) async {
+    try {
+      await AppServices.instance.superAdmin.updateAdmin(admin.id, {
+        'status': 'ACTIVE',
+      });
+      if (context.mounted) showMessage(context, 'Admin reactivated.');
+    } catch (e) {
+      if (context.mounted) showMessage(context, friendlyError(e), error: true);
     }
+  }
+
+  Future<void> _deactivate(BuildContext context) async {
     final ok = await confirmDialog(
       context,
       title: 'Deactivate ${admin.name}?',
       message:
           'Their sessions are revoked immediately and they cannot sign in as an '
-          'administrator until you re-activate them.',
+          'administrator until you reactivate them.',
       confirmLabel: 'Deactivate',
       destructive: true,
     );
     if (!ok || !context.mounted) return;
     try {
-      await AppServices.instance.admin.deactivateAdmin(admin.id);
+      await AppServices.instance.superAdmin.deactivateAdmin(admin.id);
       if (context.mounted) showMessage(context, 'Admin deactivated.');
     } catch (e) {
-      if (context.mounted) showMessage(context, '$e', error: true);
+      if (context.mounted) showMessage(context, friendlyError(e), error: true);
     }
   }
 
@@ -228,7 +259,7 @@ class _Card extends StatelessWidget {
     );
     if (!ok || !context.mounted) return;
     try {
-      final result = await AppServices.instance.admin.resetAdminAccess(
+      final result = await AppServices.instance.superAdmin.resetAdminAccess(
         admin.id,
       );
       if (!context.mounted) return;
@@ -275,19 +306,27 @@ class _Card extends StatelessWidget {
         ),
       );
     } catch (e) {
-      if (context.mounted) showMessage(context, '$e', error: true);
+      if (context.mounted) showMessage(context, friendlyError(e), error: true);
     }
   }
 }
 
-class AdminCreateScreen extends StatefulWidget {
-  const AdminCreateScreen({super.key});
+/// Adds an administrator to one society (Super Admin only).
+class SuperAdminCreateScreen extends StatefulWidget {
+  const SuperAdminCreateScreen({
+    super.key,
+    required this.societyId,
+    required this.societyName,
+  });
+
+  final String societyId;
+  final String societyName;
 
   @override
-  State<AdminCreateScreen> createState() => _AdminCreateScreenState();
+  State<SuperAdminCreateScreen> createState() => _SuperAdminCreateScreenState();
 }
 
-class _AdminCreateScreenState extends State<AdminCreateScreen> {
+class _SuperAdminCreateScreenState extends State<SuperAdminCreateScreen> {
   final _form = GlobalKey<FormState>();
   final _name = TextEditingController();
   final _mobile = TextEditingController();
@@ -302,8 +341,8 @@ class _AdminCreateScreenState extends State<AdminCreateScreen> {
   @override
   void initState() {
     super.initState();
-    AppServices.instance.admin
-        .roles()
+    AppServices.instance.superAdmin
+        .societyRoles(widget.societyId)
         .then((roles) {
           if (!mounted) return;
           setState(() {
@@ -333,15 +372,15 @@ class _AdminCreateScreenState extends State<AdminCreateScreen> {
       _error = null;
     });
     try {
-      await AppServices.instance.admin.createAdmin(
-        name: _name.text.trim(),
-        mobile: _mobile.text.trim(),
-        email: _email.text.trim().isEmpty ? null : _email.text.trim(),
-        roleId: _role!.id,
-        designation: _designation.text.trim().isEmpty
-            ? null
-            : _designation.text.trim(),
-      );
+      await AppServices.instance.superAdmin.createAdmin({
+        'societyId': widget.societyId,
+        'name': _name.text.trim(),
+        'mobile': _mobile.text.trim(),
+        if (_email.text.trim().isNotEmpty) 'email': _email.text.trim(),
+        'roleId': _role!.id,
+        if (_designation.text.trim().isNotEmpty)
+          'designation': _designation.text.trim(),
+      });
       if (!mounted) return;
       showMessage(
         context,
@@ -352,7 +391,7 @@ class _AdminCreateScreenState extends State<AdminCreateScreen> {
       if (!mounted) return;
       setState(() {
         _busy = false;
-        _error = '$e';
+        _error = friendlyError(e);
       });
     }
   }
@@ -361,7 +400,7 @@ class _AdminCreateScreenState extends State<AdminCreateScreen> {
   Widget build(BuildContext context) {
     return AppScaffold(
       title: 'New administrator',
-      subtitle: 'Creates an account with a temporary password',
+      subtitle: widget.societyName,
       body: Form(
         key: _form,
         child: ListView(
@@ -441,8 +480,8 @@ class _AdminCreateScreenState extends State<AdminCreateScreen> {
                     )
                   : _roles!.isEmpty
                   ? Text(
-                      'No roles defined yet. Create a role first under '
-                      'More → Roles and permissions.',
+                      'This society has no roles yet. The society admin can '
+                      'create one under More → Roles and permissions.',
                       style: TextStyle(
                         fontFamily: Tokens.fontFamily,
                         fontSize: Tokens.typeXs,

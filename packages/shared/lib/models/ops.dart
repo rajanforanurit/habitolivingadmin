@@ -70,13 +70,19 @@ class PropertyDetails {
       towers: asMapList(
         json['towers'],
       ).map(TowerConfig.fromJson).toList(growable: false),
-      singleFamily: json['singleFamily'] is Map
-          ? SingleFamilyConfig.fromJson(asMap(json['singleFamily']))
-          : null,
+      singleFamily: _singleFamilyOrNull(json['singleFamily']),
     );
   }
 
   static const empty = PropertyDetails();
+
+  /// A single-family block only when it actually has houses (an empty stored
+  /// object, e.g. on a multifamily society, means there is none).
+  static SingleFamilyConfig? _singleFamilyOrNull(dynamic raw) {
+    if (raw is! Map) return null;
+    final sf = SingleFamilyConfig.fromJson(asMap(raw));
+    return sf.totalHouses > 0 ? sf : null;
+  }
 
   final String? propertyName;
   final String? description;
@@ -87,10 +93,10 @@ class PropertyDetails {
   final String? notes;
   final List<FloorPlan> floorPlans;
 
-  /// Multifamily layout: every tower with its floors and units per floor.
+  /// Multifamily layout: every tower with its flat names.
   final List<TowerConfig> towers;
 
-  /// Single-family layout: the individual houses.
+  /// Single-family layout: the named houses / villas.
   final SingleFamilyConfig? singleFamily;
 
   bool get hasLayout => towers.isNotEmpty || singleFamily != null;
@@ -115,7 +121,7 @@ class PropertyDetails {
       if (clean(description) != null) 'description': clean(description),
       if (clean(parkingInfo) != null) 'parkingInfo': clean(parkingInfo),
       if (clean(notes) != null) 'notes': clean(notes),
-      'floorPlans': floorPlans.map((f) => f.toJson()).toList(),
+      if (floorPlans.isNotEmpty) 'floorPlans': floorPlans.map((f) => f.toJson()).toList(),
       // Totals are derived by the server from the layout; only the layout is sent.
       if (towers.isNotEmpty) 'towers': towers.map((t) => t.toJson()).toList(),
       if (singleFamily != null) 'singleFamily': singleFamily!.toJson(),
@@ -124,6 +130,9 @@ class PropertyDetails {
 }
 
 /// One floor of a tower and how many units it has.
+///
+/// Legacy only: older societies stored their towers as floors with a unit count.
+/// New towers store their flat names directly (see [TowerConfig.flats]).
 class FloorConfig {
   const FloorConfig({required this.number, required this.units});
 
@@ -138,16 +147,26 @@ class FloorConfig {
   Map<String, dynamic> toJson() => {'number': number, 'units': units};
 }
 
-/// A tower: its name, the short code used in unit numbers (A-101) and its floors.
+/// A tower: its name and the names of its flats (e.g. A-101, A-102).
+///
+/// Floors are not configured separately; the floor is part of the flat name.
+/// Towers saved before this change carry a [code] and [floors] instead of
+/// [flats]; [flatNames] expands those into the flat names they produced, so
+/// older societies can still be viewed and extended.
 class TowerConfig {
   const TowerConfig({
     required this.name,
-    required this.code,
-    required this.floors,
+    this.flats = const [],
+    this.code = '',
+    this.floors = const [],
   });
 
   factory TowerConfig.fromJson(Map<String, dynamic> json) => TowerConfig(
     name: asString(json['name']),
+    flats: [
+      for (final f in asList(json['flats']))
+        if (asString(f).trim().isNotEmpty) asString(f).trim(),
+    ],
     code: asString(json['code']),
     floors: asMapList(
       json['floors'],
@@ -155,52 +174,87 @@ class TowerConfig {
   );
 
   final String name;
+
+  /// The flat names in this tower, exactly as they are shown to residents.
+  final List<String> flats;
+
+  /// Legacy: the tower code used to generate unit numbers (A-101).
   final String code;
+
+  /// Legacy: floors and their unit counts.
   final List<FloorConfig> floors;
 
-  int get totalUnits => floors.fold(0, (a, f) => a + f.units);
+  /// The flat names of this tower, whether stored directly or (for older
+  /// towers) generated from the code and floors.
+  List<String> get flatNames => flats.isNotEmpty
+      ? flats
+      : [for (final f in floors) ...unitsOn(f)];
 
-  /// `A-101`: tower code, floor number, then the unit's two-digit position.
+  int get totalUnits => flatNames.length;
+
+  /// Legacy `A-101`: tower code, floor number, then the unit's two-digit position.
   static String unitLabel(String code, int floor, int index) =>
       '$code-$floor${index.toString().padLeft(2, '0')}';
 
-  /// Every unit label of one floor.
+  /// Legacy: every unit label of one floor.
   List<String> unitsOn(FloorConfig f) => [
     for (var i = 1; i <= f.units; i++) unitLabel(code, f.number, i),
   ];
 
   Map<String, dynamic> toJson() => {
     'name': name.trim(),
-    'code': code.trim().toUpperCase(),
-    'floors': floors.map((f) => f.toJson()).toList(),
+    'flats': [for (final f in flatNames) f.trim()],
   };
 }
 
-/// Single-family property: numbered houses instead of towers.
+/// Single-family property: named houses / villas instead of towers.
+///
+/// New societies store each house's name in [houses]. Societies saved before
+/// that store a count with a label prefix and start number instead;
+/// [houseNames] expands those into the names they produced (H-1, H-2 ...), so
+/// older societies can still be viewed and extended.
 class SingleFamilyConfig {
   const SingleFamilyConfig({
-    required this.totalHouses,
+    this.houses = const [],
+    this.legacyTotal = 0,
     this.labelPrefix = 'H-',
     this.startNumber = 1,
   });
 
   factory SingleFamilyConfig.fromJson(Map<String, dynamic> json) =>
       SingleFamilyConfig(
-        totalHouses: asInt(json['totalHouses']),
+        houses: [
+          for (final h in asList(json['houses']))
+            if (asString(h).trim().isNotEmpty) asString(h).trim(),
+        ],
+        legacyTotal: asInt(json['totalHouses']),
         labelPrefix: asString(json['labelPrefix'], fallback: 'H-'),
         startNumber: asInt(json['startNumber'], fallback: 1),
       );
 
-  final int totalHouses;
+  /// The name of every house / villa, as residents know it.
+  final List<String> houses;
+
+  /// Legacy: number of houses, named [labelPrefix] + number from [startNumber].
+  final int legacyTotal;
   final String labelPrefix;
   final int startNumber;
 
-  String labelAt(int i) => '$labelPrefix${startNumber + i}';
+  /// Every house name, whether stored directly or (older societies) generated.
+  List<String> get houseNames => houses.isNotEmpty
+      ? houses
+      : [for (var i = 0; i < legacyTotal; i++) '$labelPrefix${startNumber + i}'];
+
+  int get totalHouses => houseNames.length;
+
+  /// The name of the house at [i] (empty when out of range).
+  String labelAt(int i) {
+    final names = houseNames;
+    return i >= 0 && i < names.length ? names[i] : '';
+  }
 
   Map<String, dynamic> toJson() => {
-    'totalHouses': totalHouses,
-    'labelPrefix': labelPrefix.trim(),
-    'startNumber': startNumber,
+    'houses': [for (final h in houseNames) h.trim()],
   };
 }
 

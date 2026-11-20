@@ -77,8 +77,8 @@ class SocietyInfoScreen extends StatelessWidget {
                         for (var i = 0; i < d.towers.length; i++) ...[
                           if (i > 0) const Hairline(),
                           ListRow(
-                            title: '${d.towers[i].name} (${d.towers[i].code})',
-                            subtitle: '${d.towers[i].floors.length} floors · ${d.towers[i].totalUnits} units',
+                            title: d.towers[i].name,
+                            subtitle: '${d.towers[i].totalUnits} ${d.towers[i].totalUnits == 1 ? 'flat' : 'flats'}',
                             icon: Icons2.tower,
                             dense: true,
                             showChevron: false,

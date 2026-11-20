@@ -150,7 +150,7 @@ class Vendor {
       asString(json['category'] ?? json['type'], fallback: 'OTHER'),
     ),
     status: humanize(asString(json['status'], fallback: 'ACTIVE')),
-    contactName: asStringOrNull(json['contactName']),
+    contactName: asStringOrNull(json['contactName'] ?? json['contactPerson']),
     phone: asStringOrNull(json['phone'] ?? json['mobile']),
     email: asStringOrNull(json['email']),
     contractUntil: asDateOrNull(json['contractUntil'] ?? json['contractEnd']),

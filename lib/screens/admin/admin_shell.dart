@@ -10,6 +10,7 @@ import 'package:habitoliving_shared/ui/widgets/bottom_nav.dart';
 import '../../services/notification_router.dart';
 import '../calls/call_contacts_screen.dart';
 import '../widgets/tab_host.dart';
+import 'admin_settings_tab.dart';
 import 'approvals_tab.dart';
 import 'complaints_tab.dart';
 import 'community_moderation_screen.dart';
@@ -17,7 +18,6 @@ import 'emergency_alarms_screen.dart';
 import 'helpdesk_screen.dart';
 import 'platform_monitor_screen.dart';
 import 'society_info_screen.dart';
-import 'finance_tab.dart';
 import 'gate_screen.dart';
 import 'notices_screen.dart';
 import 'overview_tab.dart';
@@ -25,11 +25,10 @@ import 'residents_tab.dart';
 
 /// Admin shell.
 ///
-/// Five tabs, in the order an admin's day goes: what needs me now, the
-/// paperwork, money, people, then the building itself. Everything else — staff,
-/// vendors, amenities, marketplace, notices — lives one level down in More,
-/// because there are too many to keep on the nav bar and the nav bar is the
-/// one thing that must stay small.
+/// Five tabs: what needs me now, the paperwork, settings, people, then the
+/// reports. Settings holds everything that is not an everyday job — gates,
+/// guards, staff, amenities, marketplace, documents, account — because there
+/// are too many to keep on the nav bar and the nav bar must stay small.
 class AdminShell extends StatefulWidget {
   const AdminShell({super.key, this.initialTab = 0});
 
@@ -72,10 +71,7 @@ class _AdminShellState extends State<AdminShell> with TabHost<AdminShell> {
       tabSections: const {
         'approvals': 1,
         'approval': 1,
-        'finance': 2,
-        'invoices': 2,
-        'expenses': 2,
-        'charges': 2,
+        'settings': 2,
         'residents': 3,
         'resident': 3,
         'complaints': 4,
@@ -163,7 +159,7 @@ class _AdminShellState extends State<AdminShell> with TabHost<AdminShell> {
   static const _pages = <Widget>[
     OverviewTab(),
     ApprovalsTab(),
-    FinanceTab(),
+    AdminSettingsTab(),
     ResidentsTab(),
     ComplaintsTab(),
   ];
@@ -180,9 +176,9 @@ class _AdminShellState extends State<AdminShell> with TabHost<AdminShell> {
       label: 'Approvals',
     ),
     NavDestination(
-      icon: Icons2.finance,
-      activeIcon: Icons2.finance,
-      label: 'Money',
+      icon: Icons2.settings,
+      activeIcon: Icons2.settings,
+      label: 'Settings',
     ),
     NavDestination(
       icon: Icons2.residents,

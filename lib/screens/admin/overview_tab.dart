@@ -12,16 +12,15 @@ import 'package:habitoliving_shared/ui/widgets/app_scaffold.dart';
 import 'package:habitoliving_shared/ui/widgets/primitives.dart';
 import 'package:habitoliving_shared/ui/widgets/states.dart';
 import '../widgets/tab_host.dart';
-import 'admin_more_screen.dart';
 import 'gate_screen.dart';
 import 'notices_screen.dart';
 import '../notifications_inbox_screen.dart';
 
 /// The admin's morning: what is true right now.
 ///
-/// Built from the same numbers an admin would otherwise open three screens to
-/// see — the money summary, the approval queue, the building counts, and any
-/// open panic alerts. Each count is a link, not a decoration: tapping
+/// Built from the same numbers an admin would otherwise open several screens
+/// to see — the approval queue, the building counts, and any open panic
+/// alerts. Each count is a link, not a decoration: tapping
 /// "7 pending" opens the approvals list, because a dashboard that only reports
 /// is a dashboard nobody opens twice.
 class OverviewTab extends StatefulWidget {
@@ -32,7 +31,6 @@ class OverviewTab extends StatefulWidget {
 }
 
 class _OverviewTabState extends State<OverviewTab> with TabHost<OverviewTab> {
-  late Future<FinanceSummary> _money;
   late Future<PageResult<ApprovalRequest>> _approvals;
   late Future<Map<String, dynamic>> _overview;
   late Future<List<EmergencyAlert>> _alerts;
@@ -52,7 +50,6 @@ class _OverviewTabState extends State<OverviewTab> with TabHost<OverviewTab> {
 
   void _reload() {
     final admin = AppServices.instance.admin;
-    _money = admin.financeSummary();
     _approvals = admin.approvals(status: 'SUBMITTED', limit: 3);
     _overview = admin.overview();
     _alerts = admin.alerts(status: 'ACTIVE');
@@ -62,7 +59,7 @@ class _OverviewTabState extends State<OverviewTab> with TabHost<OverviewTab> {
     _reload();
     setState(() {});
     try {
-      await Future.wait([_money, _approvals, _overview, _alerts]);
+      await Future.wait([_approvals, _overview, _alerts]);
     } catch (e) {
       if (mounted) showMessage(context, '$e', error: true);
     }
@@ -83,13 +80,6 @@ class _OverviewTabState extends State<OverviewTab> with TabHost<OverviewTab> {
             MaterialPageRoute(builder: (_) => const NotificationsInboxScreen()),
           ),
         ),
-        HeaderAction(
-          icon: Icons2.more,
-          tooltip: 'Everything else',
-          onPressed: () => Navigator.of(
-            context,
-          ).push(MaterialPageRoute(builder: (_) => const AdminMoreScreen())),
-        ),
       ],
       body: RefreshIndicator(
         onRefresh: _pull,
@@ -97,14 +87,6 @@ class _OverviewTabState extends State<OverviewTab> with TabHost<OverviewTab> {
         child: ListView(
           padding: EdgeInsets.only(bottom: Tokens.space6),
           children: [
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: Tokens.space4),
-              child: _HeroCard(
-                future: _money,
-                onTap: () => NotificationRouter.requestTab(2),
-              ),
-            ),
-            SizedBox(height: Tokens.space5),
             Padding(
               padding: EdgeInsets.symmetric(horizontal: Tokens.space4),
               child: Text(
@@ -170,119 +152,6 @@ class _OverviewTabState extends State<OverviewTab> with TabHost<OverviewTab> {
           ],
         ),
       ),
-    );
-  }
-}
-
-/// The headline: how much money came in this cycle, what is still outstanding,
-/// and how much of it is collected. Tapping opens Money.
-class _HeroCard extends StatelessWidget {
-  const _HeroCard({required this.future, required this.onTap});
-
-  final Future<FinanceSummary> future;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return FutureBuilder<FinanceSummary>(
-      future: future,
-      builder: (context, snapshot) {
-        if (snapshot.connectionState == ConnectionState.waiting) {
-          return const Panel(child: LoadingList(rows: 3));
-        }
-        if (snapshot.hasError) {
-          return Panel(
-            child: ErrorState(compact: true, message: '${snapshot.error}'),
-          );
-        }
-        final s = snapshot.data ?? FinanceSummary();
-        return InkResponse(
-          onTap: onTap,
-          radius: 14,
-          child: Container(
-            width: double.infinity,
-            padding: EdgeInsets.all(Tokens.space4),
-            decoration: BoxDecoration(
-              color: Tokens.accent,
-              borderRadius: BorderRadius.circular(Tokens.radiusMd),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'COLLECTED THIS CYCLE',
-                  style: TextStyle(
-                    fontFamily: Tokens.fontFamily,
-                    fontSize: Tokens.typeXs,
-                    fontWeight: FontWeight.w600,
-                    letterSpacing: 0.6,
-                    color: Color(0xCCFFFFFF),
-                  ),
-                ),
-                SizedBox(height: Tokens.space1),
-                Text(
-                  Fmt.money(s.collected),
-                  style: TextStyle(
-                    fontFamily: Tokens.fontFamilyFigure,
-                    fontSize: Tokens.type2Xl,
-                    height: 1.05,
-                    fontWeight: FontWeight.w600,
-                    color: Tokens.accentOn,
-                  ),
-                ),
-                const SizedBox(height: Tokens.space3),
-                Row(
-                  children: [
-                    _Stat(
-                      label: 'Outstanding',
-                      value: Fmt.moneyCompact(s.outstanding),
-                    ),
-                    const SizedBox(width: Tokens.space5),
-                    _Stat(label: 'Overdue', value: Fmt.moneyCompact(s.overdue)),
-                    const SizedBox(width: Tokens.space5),
-                    _Stat(
-                      label: 'Collected',
-                      value: '${s.collectionRate.toStringAsFixed(0)}%',
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-        );
-      },
-    );
-  }
-}
-
-class _Stat extends StatelessWidget {
-  const _Stat({required this.label, required this.value});
-  final String label;
-  final String value;
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          value,
-          style: TextStyle(
-            fontFamily: Tokens.fontFamilyFigure,
-            fontSize: Tokens.typeBase,
-            fontWeight: FontWeight.w600,
-            color: Tokens.accentOn,
-          ),
-        ),
-        Text(
-          label,
-          style: const TextStyle(
-            fontFamily: Tokens.fontFamily,
-            fontSize: Tokens.typeXs,
-            color: Color(0xB3FFFFFF),
-          ),
-        ),
-      ],
     );
   }
 }

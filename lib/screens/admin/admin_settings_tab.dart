@@ -13,9 +13,6 @@ import '../lost_found_screen.dart';
 import '../audit_log_screen.dart';
 import '../notifications_inbox_screen.dart';
 import '../settings_screen.dart';
-import 'charges_screen.dart';
-import 'expenses_screen.dart';
-import 'administrators_screen.dart';
 import 'gates_screen.dart';
 import 'guards_screen.dart';
 import '../calls/call_contacts_screen.dart';
@@ -24,7 +21,6 @@ import 'emergency_alarms_screen.dart';
 import 'helpdesk_screen.dart';
 import 'platform_monitor_screen.dart';
 import 'society_info_screen.dart';
-import 'vehicles_parking_screen.dart';
 import 'amenities_screen.dart';
 import 'marketplace_admin_screen.dart';
 import 'property_admin_screen.dart';
@@ -34,16 +30,16 @@ import 'incidents_screen.dart';
 import 'emergency_contacts_screen.dart';
 import 'setup/roles_screen.dart';
 import 'setup/staff_screen.dart';
-import 'setup/vendors_screen.dart';
 
-/// Everything that is not an everyday job.
+/// Settings: everything that is not an everyday job.
 ///
-/// The five tabs are what an admin opens daily. This screen is what they open
-/// when the building itself changes: a new tower, a new gate, a new role, a new
-/// vendor. Keeping that out of the tabs means the daily screens stay short, and
+/// A tab of its own in the bottom navigation (it used to be the "More" screen
+/// behind the three dots on Overview). It is what an admin opens when the
+/// building itself changes: a new gate, a new role, new staff — plus the
+/// shared, community and account options. Keeping that out of the tabs means the daily screens stay short, and
 /// the setup work is one place instead of six menus.
-class AdminMoreScreen extends StatelessWidget {
-  const AdminMoreScreen({super.key});
+class AdminSettingsTab extends StatelessWidget {
+  const AdminSettingsTab({super.key});
 
   @override
   Widget build(BuildContext context) {
@@ -51,8 +47,9 @@ class AdminMoreScreen extends StatelessWidget {
     final name = session.displayName;
 
     return AppScaffold(
-      title: 'More',
+      title: 'Settings',
       subtitle: 'Your society',
+      showBack: false,
       body: ListView(
         padding: const EdgeInsets.only(bottom: Tokens.space8),
         children: [
@@ -77,7 +74,7 @@ class AdminMoreScreen extends StatelessWidget {
               children: [
                 ListRow(
                   title: 'Property details',
-                  subtitle: 'Towers, units, floor plans and hospitals (set by the platform team)',
+                  subtitle: 'Towers, units and hospitals (set by the platform team)',
                   icon: Icons2.property,
                   onTap: () => Navigator.of(context).push(
                     MaterialPageRoute(builder: (_) => const SocietyInfoScreen()),
@@ -121,42 +118,11 @@ class AdminMoreScreen extends StatelessWidget {
                 ),
                 const Hairline(),
                 ListRow(
-                  title: 'Vendors',
-                  subtitle: 'Who the society hires',
-                  icon: Icons2.vendors,
-                  onTap: () => Navigator.of(context).push(
-                    MaterialPageRoute(builder: (_) => const VendorsScreen()),
-                  ),
-                ),
-                const Hairline(),
-                ListRow(
-                  title: 'Administrators',
-                  subtitle: 'Who else can run the society',
-                  icon: Icons2.administrators,
-                  onTap: () => Navigator.of(context).push(
-                    MaterialPageRoute(
-                      builder: (_) => const AdministratorsScreen(),
-                    ),
-                  ),
-                ),
-                const Hairline(),
-                ListRow(
                   title: 'Amenities',
                   subtitle: 'Gym, clubhouse, pool — and bookings',
                   icon: Icons2.amenities,
                   onTap: () => Navigator.of(context).push(
                     MaterialPageRoute(builder: (_) => const AmenitiesScreen()),
-                  ),
-                ),
-                const Hairline(),
-                ListRow(
-                  title: 'Vehicles & parking',
-                  subtitle: 'Vehicles, slots and requests',
-                  icon: Icons2.vehicles,
-                  onTap: () => Navigator.of(context).push(
-                    MaterialPageRoute(
-                      builder: (_) => const VehiclesParkingScreen(),
-                    ),
                   ),
                 ),
               ],
@@ -203,34 +169,6 @@ class AdminMoreScreen extends StatelessWidget {
                   icon: Icons2.monitoring,
                   onTap: () => Navigator.of(context).push(
                     MaterialPageRoute(builder: (_) => const PlatformMonitorScreen()),
-                  ),
-                ),
-              ],
-            ),
-          ),
-
-          const SizedBox(height: Tokens.space6),
-          const SectionLabel('Money'),
-          const SizedBox(height: Tokens.space2),
-          Panel(
-            margin: const EdgeInsets.symmetric(horizontal: Tokens.space4),
-            child: Column(
-              children: [
-                ListRow(
-                  title: 'Charges',
-                  subtitle: 'What the society bills for',
-                  icon: Icons2.finance,
-                  onTap: () => Navigator.of(context).push(
-                    MaterialPageRoute(builder: (_) => const ChargesScreen()),
-                  ),
-                ),
-                const Hairline(),
-                ListRow(
-                  title: 'Expenses',
-                  subtitle: 'What was spent',
-                  icon: Icons2.reports,
-                  onTap: () => Navigator.of(context).push(
-                    MaterialPageRoute(builder: (_) => const ExpensesScreen()),
                   ),
                 ),
               ],

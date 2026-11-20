@@ -27,7 +27,7 @@ class SuperAdminsTab extends StatelessWidget {
         load: () => AppServices.instance.superAdmin.admins(limit: 100),
         emptyIcon: Icons2.administrators,
         emptyTitle: 'No administrators',
-        emptyMessage: 'Administrators appear here once a society has been created or approved.',
+        emptyMessage: 'Administrators appear here once a society has been created.',
         builder: (context, admins, reload) => ListView.separated(
           physics: const AlwaysScrollableScrollPhysics(),
           padding: const EdgeInsets.only(bottom: Tokens.space8),
