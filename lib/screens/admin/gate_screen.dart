@@ -5,6 +5,7 @@ import 'package:habitoliving_shared/models/json.dart';
 import 'package:habitoliving_shared/models/resident.dart';
 import 'package:habitoliving_shared/services/app_services.dart';
 import 'package:habitoliving_shared/services/format.dart';
+import 'package:habitoliving_shared/services/socket_service.dart';
 import 'package:habitoliving_shared/ui/icons.dart';
 import 'package:habitoliving_shared/ui/tokens.dart';
 import 'package:habitoliving_shared/ui/widgets/app_scaffold.dart';
@@ -29,10 +30,35 @@ class _GateScreenState extends State<GateScreen> {
   late Future<List<Visitor>> _inside;
   late Future<PageResult<Visitor>> _activity;
 
+  final List<void Function()> _unsubscribers = [];
+
   @override
   void initState() {
     super.initState();
     _reload();
+    // Entry, exit and denial stream in from the guards, so "inside right now"
+    // is live rather than as old as the last pull.
+    for (final e in const [
+      Events.visitorEntered,
+      Events.visitorExited,
+      Events.visitorDenied,
+      Events.visitorDecision,
+      Events.visitorOverstay,
+    ]) {
+      _unsubscribers.add(AppServices.instance.socket.on(e, (_) {
+        if (!mounted) return;
+        _reload();
+        setState(() => _revision++);
+      }));
+    }
+  }
+
+  @override
+  void dispose() {
+    for (final u in _unsubscribers) {
+      u();
+    }
+    super.dispose();
   }
 
   void _reload() {

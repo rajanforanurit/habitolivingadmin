@@ -318,41 +318,25 @@ class _GuardCreateScreenState extends State<GuardCreateScreen> {
   final _form = GlobalKey<FormState>();
   final _name = TextEditingController();
   final _mobile = TextEditingController();
+  final _password = TextEditingController();
+  bool _showPassword = false;
 
-  List<Gate>? _gates;
-  String? _gateId;
-  String _shift = 'DAY';
+  String _shift = 'GENERAL';
   bool _busy = false;
   String? _error;
 
   static final _shifts = <(String, String)>[
-    ('DAY', 'Day'),
+    ('GENERAL', 'General'),
+    ('MORNING', 'Morning'),
+    ('AFTERNOON', 'Afternoon'),
     ('NIGHT', 'Night'),
-    ('ROTATING', 'Rotating'),
   ];
-
-  @override
-  void initState() {
-    super.initState();
-    AppServices.instance.admin
-        .gates()
-        .then((gates) {
-          if (!mounted) return;
-          setState(() {
-            _gates = gates;
-            _gateId = gates.isNotEmpty ? gates.first.id : null;
-          });
-        })
-        .catchError((_) {
-          if (!mounted) return;
-          setState(() => _gates = const <Gate>[]);
-        });
-  }
 
   @override
   void dispose() {
     _name.dispose();
     _mobile.dispose();
+    _password.dispose();
     super.dispose();
   }
 
@@ -366,11 +350,11 @@ class _GuardCreateScreenState extends State<GuardCreateScreen> {
       await AppServices.instance.admin.createGuard(
         name: _name.text.trim(),
         mobile: _mobile.text.trim(),
-        gateId: _gateId,
+        password: _password.text,
         shift: _shift,
       );
       if (!mounted) return;
-      showMessage(context, 'Guard registered. They can sign in now.');
+      showMessage(context, 'Guard registered. Share the mobile number and password with them.');
       Navigator.of(context).pop(true);
     } catch (e) {
       if (!mounted) return;
@@ -418,49 +402,35 @@ class _GuardCreateScreenState extends State<GuardCreateScreen> {
                 ),
               ),
             ),
-            SizedBox(height: Tokens.space5),
+            SizedBox(height: Tokens.space4),
             Padding(
-              padding: EdgeInsets.symmetric(horizontal: Tokens.space4),
-              child: Text(
-                'Gate',
-                style: TextStyle(
-                  fontFamily: Tokens.fontFamily,
-                  fontSize: Tokens.typeSm,
-                  fontWeight: FontWeight.w600,
-                  color: Tokens.ink,
+              padding: const EdgeInsets.symmetric(horizontal: Tokens.space4),
+              child: TextFormField(
+                controller: _password,
+                obscureText: !_showPassword,
+                autocorrect: false,
+                enableSuggestions: false,
+                validator: (v) {
+                  final p = v ?? '';
+                  if (p.length < 8) return 'At least 8 characters';
+                  if (!RegExp(r'[a-z]').hasMatch(p)) return 'Add a lowercase letter';
+                  if (!RegExp(r'[A-Z]').hasMatch(p)) return 'Add an uppercase letter';
+                  if (!RegExp(r'\d').hasMatch(p)) return 'Add a digit';
+                  return null;
+                },
+                decoration: InputDecoration(
+                  labelText: 'Password',
+                  helperText: '8+ characters with upper, lower case and a digit',
+                  suffixIcon: IconButton(
+                    tooltip: _showPassword ? 'Hide password' : 'Show password',
+                    icon: Icon(
+                      _showPassword ? Icons.visibility_off : Icons.visibility,
+                    ),
+                    onPressed: () =>
+                        setState(() => _showPassword = !_showPassword),
+                  ),
                 ),
               ),
-            ),
-            SizedBox(height: Tokens.space3),
-            Padding(
-              padding: EdgeInsets.symmetric(horizontal: Tokens.space4),
-              child: _gates == null
-                  ? LinearProgressIndicator(
-                      minHeight: 2,
-                      backgroundColor: Tokens.surfaceSunken,
-                      color: Tokens.accent,
-                    )
-                  : _gates!.isEmpty
-                  ? Text(
-                      'No gates defined yet. Add one under More → Society setup → Gates.',
-                      style: TextStyle(
-                        fontFamily: Tokens.fontFamily,
-                        fontSize: Tokens.typeXs,
-                        color: Tokens.inkMuted,
-                      ),
-                    )
-                  : Wrap(
-                      spacing: Tokens.space2,
-                      runSpacing: Tokens.space2,
-                      children: [
-                        for (final gate in _gates!)
-                          _Choice(
-                            label: gate.name,
-                            selected: gate.id == _gateId,
-                            onTap: () => setState(() => _gateId = gate.id),
-                          ),
-                      ],
-                    ),
             ),
             SizedBox(height: Tokens.space5),
             Padding(

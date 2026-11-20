@@ -6,7 +6,6 @@ import 'package:socket_io_client/socket_io_client.dart' as io;
 
 import '../config.dart';
 
-/// One realtime event, as delivered by the backend over Socket.IO.
 class RealtimeEvent {
   const RealtimeEvent(this.name, this.data);
 
@@ -17,17 +16,16 @@ class RealtimeEvent {
   String? get type => data['type'] is String ? data['type'] as String : null;
 }
 
-/// Backend realtime events.
-///
-/// Names match `backend/src/realtime/socket.ts` and the notification router's
-/// tag description. Anything unknown is forwarded too, so the app can listen
-/// for a new event without a client change.
 class Events {
   Events._();
 
   static const notification = 'notification:new';
   static const visitorArrived = 'visitor:arrived';
   static const visitorDecision = 'visitor:decision';
+  static const visitorEntered = 'visitor:entered';
+  static const visitorExited = 'visitor:exited';
+  static const visitorDenied = 'visitor:denied';
+  static const visitorOverstay = 'visitor:overstay';
   static const deliveryArrived = 'delivery:arrived';
   static const deliveryDecision = 'delivery:decision';
   static const chatMessage = 'chat:message';
@@ -56,6 +54,10 @@ class Events {
     notification,
     visitorArrived,
     visitorDecision,
+    visitorEntered,
+    visitorExited,
+    visitorDenied,
+    visitorOverstay,
     deliveryArrived,
     deliveryDecision,
     approvalUpdated,
@@ -73,16 +75,7 @@ class Events {
 }
 
 /// Socket.IO connection with automatic reconnection.
-///
-/// Two things make this reliable:
-///
-/// - Auth happens at handshake with the current access token. When the token
-///   refreshes (every 15 minutes), the socket must re-handshake, otherwise the
-///   server drops it. [refreshToken] does that.
-/// - Reconnect uses the socket's own backoff, and every reconnect re-handshakes
-///   with the current token.
-///
-/// Screens subscribe with [on] and cancel the subscription in `dispose`.
+
 class SocketService {
   SocketService._();
   static final SocketService instance = SocketService._();
@@ -205,6 +198,10 @@ class SocketService {
     Events.notification,
     Events.visitorArrived,
     Events.visitorDecision,
+    Events.visitorEntered,
+    Events.visitorExited,
+    Events.visitorDenied,
+    Events.visitorOverstay,
     Events.deliveryArrived,
     Events.deliveryDecision,
     Events.chatMessage,

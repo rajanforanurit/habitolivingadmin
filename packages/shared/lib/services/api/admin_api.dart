@@ -564,6 +564,7 @@ class AdminApi {
   Future<Guard> createGuard({
     required String name,
     required String mobile,
+    required String password,
     String? gateId,
     String? shift,
   }) async {
@@ -572,6 +573,7 @@ class AdminApi {
       body: {
         'name': name,
         'mobile': mobile,
+        'password': password,
         if (gateId != null && gateId.isNotEmpty) 'gateId': gateId,
         if (shift != null && shift.isNotEmpty) 'shift': shift,
       },
